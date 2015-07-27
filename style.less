@@ -14,12 +14,14 @@
 @font-size-base: 16px;
 
 @gray-lightish: lighten(#fff - @gray-dark, 5%);
+@gray-darker: #383838;
 
 @link-color: #2F5D7C;
 @link-hover-color: lighten(@link-color, 10%);
 
 a.subtle-link {
   color: inherit;
+  text-decoration: none !important;
 }
 
 .container-fluid {
@@ -29,15 +31,26 @@ a.subtle-link {
   }
 }
 
+#header {
+  background-color: @gray-darker;
+  h1 {
+    color: @gray-lightish;
+  }
+}
+
 #navigation {
   background-color: @gray-dark;
 
   a {
     color: @gray-lightish;
   }
-  li.active {
-    a {
-      color: #fff;
+  li {
+    padding-left: 10px;
+    padding-right: 10px;
+    &:active {
+      a {
+        color: #fff;
+      }
     }
   }
 

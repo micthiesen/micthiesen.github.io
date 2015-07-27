@@ -25,8 +25,12 @@ navigation:
     <link rel="stylesheet" href="/build/style.css" type="text/css" media="screen" />
   </head>
   <body>
-    <div class="container-fluid">
-      <h1 class="site-name">{{ site.name }}</h1>
+    <div id="header">
+       <div class="container-fluid">
+        <h1 class="site-name">
+          <a class="subtle-link" href="/">{{ site.name }}</a>
+        </h1>
+      </div>
     </div>
 
     <div id="navigation">
@@ -35,7 +39,14 @@ navigation:
           {% assign url = page.url | remove:'index.html' %}
           {% for link in page.navigation %}
             <li {% if url == link.url %}class="active"{% endif %}>
-              <a href="{{ link.url }}">{{ link.text }}</a>
+              {% if link.url contains 'http://' or link.url contains 'https://' %}
+                <a class="subtle-link" href="{{ link.url }}" target="_blank">
+                  {{ link.text }}
+                  <span class="glyphicon glyphicon-new-window"></span>
+                </a>
+              {% else %}
+                <a class="subtle-link" href="{{ link.url }}">{{ link.text }}</a>
+              {% endif %}
             </li>
           {% endfor %}
         </ul>
