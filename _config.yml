@@ -1,6 +1,6 @@
 name: Michael Thiesen
 url: http://www.micthiesen.ca
-dateformat: "%-d %B, %Y"
+dateformat: "%-d %B %Y"
 
 paginate: 5
 paginate_path: /page/:num/

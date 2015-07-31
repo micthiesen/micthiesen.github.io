@@ -4,7 +4,10 @@ layout: default
 
 <article>
   <div class="post">
-    <p class="text-muted">{{ page.date | date: site.dateformat }}</p>
+    <p class="text-muted">
+      {{ page.date | date: site.dateformat }},
+      <span data-d-date="{{ page.date | date_to_xmlschema }}">&hellip;</span>
+    </p>
     {{ content }}
   </div>
 </article>

@@ -9,6 +9,7 @@
   "private": true,
   "dependencies": {
     "bootstrap": "~3",
-    "components-font-awesome": "~4"
+    "components-font-awesome": "~4",
+    "moment": "~2.10.6"
   }
 }

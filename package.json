@@ -19,6 +19,7 @@
       "$": false,
       "console": false,
       "document": false,
+      "moment": false,
       "window": false
     },
     "globalstrict": true

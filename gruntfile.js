@@ -22,6 +22,12 @@ module.exports = function(grunt) {
         src: ['jquery.min.js'],
         dest: 'build/js/'
       },
+      moment: {
+        cwd: 'bower_components/moment/min/',
+        expand: true,
+        src: ['moment.min.js'],
+        dest: 'build/js/'
+      }
     },
     less: {
       prod: {

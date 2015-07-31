@@ -7,9 +7,12 @@ layout: default
     <h4><a class="subtle-link" href="{{ post.url}}">
       {{ post.title }} <small class="glyphicon glyphicon-link"></small>
     </a></h4>
-    <p class="text-muted">{{ post.date | date: site.dateformat }}</p>
+    <p class="text-muted">
+      {{ post.date | date: site.dateformat }},
+      <span data-d-date="{{ post.date | date_to_xmlschema }}">&hellip;</span>
+    </p>
     {{ post.excerpt }}
-    <p><a href="{{ post.url }}">Continue reading...</a></p>
+    <p><a href="{{ post.url }}">Continue reading&hellip;</a></p>
   </div>
 {% endfor %}
 
