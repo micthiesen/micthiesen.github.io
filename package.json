@@ -13,5 +13,14 @@
     "grunt-contrib-less": "~0.11.4",
     "grunt-contrib-watch": "~0.6.1",
     "grunt-jekyll": "^0.4.2"
+  },
+  "jshintConfig": {
+    "globals": {
+      "$": false,
+      "console": false,
+      "document": false,
+      "window": false
+    },
+    "globalstrict": true
   }
 }
