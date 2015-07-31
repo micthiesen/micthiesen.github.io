@@ -42,7 +42,7 @@ navigation:
               {% if link.url contains 'http://' or link.url contains 'https://' %}
                 <a class="subtle-link" href="{{ link.url }}" target="_blank">
                   {{ link.text }}
-                  <span class="glyphicon glyphicon-new-window"></span>
+                  <small class="glyphicon glyphicon-link"></small>
                 </a>
               {% else %}
                 <a class="subtle-link" href="{{ link.url }}">{{ link.text }}</a>
