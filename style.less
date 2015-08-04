@@ -33,39 +33,32 @@ a.subtle-link {
 }
 
 #header {
-  background-color: @gray-darker;
+  background-image: url(/images/background.jpg);
+  background-repeat: repeat-x;
   h1 {
-    color: #fff;
+    color: white;
+    text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
   }
 }
 
 #navigation {
-  background-color: @gray-dark;
+  background-color: #424242;
   box-shadow: 0px 0px 10px 0px rgba(50, 50, 50, 0.5);
 
-  a {
-    color: @gray-lightish;
-  }
+  a { color: @gray-lightish; }
   li {
     padding-left: 10px;
     padding-right: 10px;
-    &:active {
-      a {
-        color: #fff;
-      }
-    }
+    &:active { a { color: white; } }
   }
+  li.active > a { color: white; }
 
   padding-top: 20px;
   padding-bottom: 20px;
-  ul {
-    margin-bottom: 0;
-  }
+  ul { margin-bottom: 0; }
 }
 
-.post-preview {
-  padding-top: 10px;
-}
+.post-preview { padding-top: 10px; }
 
 .responsive-video {
   position: relative;
