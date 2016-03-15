@@ -1,6 +1,4 @@
-
-
-
+@@ -6,18 +6,18 @@ title: A Track Day Recap
 
 Last Thursday, March 3rd, was our annual Supermileage Learning Event, and it was filled with surprises. The goal of the event was 
 for us to showcase the UBC Supermileage Team by presenting our progress, accomplishments, and fuel saving ideas to members of the 
