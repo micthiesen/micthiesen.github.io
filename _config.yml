@@ -20,7 +20,7 @@ exclude: [
   styles
 ]
 
-highlighter: pygments
+highlighter: rouge
 
 gems:
   - jekyll-sitemap
