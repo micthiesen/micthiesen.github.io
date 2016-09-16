@@ -66,24 +66,36 @@ sponsors:
   - name: Daniel Family Foundation
     link: https://www.facebook.com/danielfamilyfoundation/
     logo: /images/logos/dff.png
+goldsponsors:
   - name: Shell
     link: http://shell.ca
     logo: /images/logos/shell.gif
   - name: UBC
     link: http://ubc.ca
     logo: /images/logos/ubc.png
-  - name: SOLIDWORKS
-    link: http://www.solidworks.com/
-    logo: /images/logos/solidworks.png
+  - name: AMS Sustainability
+    link: http://amssustainability.ca/
+    logo: /images/logos/ams-sustainability.png
   - name: UBC Mechanical Engineering
     link: http://mech.ubc.ca/
     logo: /images/logos/ubc-mechanical-engineering.png
-  - name: Financial Strategies
-    link: http://www.fsfinancialstrategies.ca/
-    logo: /images/logos/fs.png
+  - name: Honda
+    link: http://www.honda.ca/
+    logo: /images/logos/honda.png
   - name: Knighthill
     link: http://knighthill.com/
     logo: /images/logos/knighthill.png
+silversponsors:
+  - name: SOLIDWORKS
+    link: http://www.solidworks.com/
+    logo: /images/logos/solidworks.png
+  - name: Fluor
+    link: http://www.fluor.com/canada
+    logo: /images/logos/fluor.jpg
+  - name: APEGBC
+    link: https://www.apeg.bc.ca/Home
+    logo: /images/logos/apegbc.png
+bronzesponsors:
   - name: ZABER
     link: http://www.zaber.com/
     logo: /images/logos/zaber.png
@@ -93,39 +105,19 @@ sponsors:
   - name: intergulf
     link: http://intergulf.com/commodities/084/index.html
     logo: /images/logos/intergulf.jpg
-  - name: vorum
-    link: http://www.vorum.com/english/
-    logo: /images/logos/vorum.jpg
-  - name: CRN
-    link: http://crn.ubc.ca/
-    logo: /images/logos/crn.jpg
-  - name: AVCORP
-    link: http://www.avcorp.com/
-    logo: /images/logos/avcorp.png
   - name: Fiber-Tek
     link: http://www.fibertek.ca/
     logo: /images/logos/fiber-tek.gif
-  - name: APEGBC
-    link: https://www.apeg.bc.ca/Home
-    logo: /images/logos/apegbc.png
   - name: Soller Composites
     link: http://www.sollercomposites.com/
     logo: /images/logos/soller-composites.jpg
-  - name: Fluor
-    link: http://www.fluor.com/canada
-    logo: /images/logos/fluor.jpg
-  - name: Honda
-    link: http://www.honda.ca/
-    logo: /images/logos/honda.png
   - name: Max Torque
     link: http://www.maxtorque.com/
     logo: /images/logos/max-torque.png
   - name: Formsprag
     link: http://www.formsprag.com/
     logo: /images/logos/formsprag.jpg
-  - name: AMS Sustainability
-    link: http://amssustainability.ca/
-    logo: /images/logos/ams-sustainability.png
+
 ---
 
 <!DOCTYPE html>
@@ -205,7 +197,44 @@ sponsors:
         </div>
         <div id="sidebar" class="col-md-3">
           <h3 class="text-center" id="sidebar-title">Sponsors</h3>
+          <p class="text-center">Diamond</p>
           {% for sponsor in layout.sponsors %}
+            <p class="text-center">
+              <a href="{{ sponsor.link }}" target="_blank">
+                <img
+                  src="{{ sponsor.logo }}"
+                  alt="{{ sponsor.name }}"
+                  title="{{ sponsor.name }}"
+                  />
+              </a>
+            </p>
+          {% endfor %}
+          <p class="text-center">Gold</p>
+          {% for sponsor in layout.goldsponsors %}
+            <p class="text-center">
+              <a href="{{ sponsor.link }}" target="_blank">
+                <img
+                  src="{{ sponsor.logo }}"
+                  alt="{{ sponsor.name }}"
+                  title="{{ sponsor.name }}"
+                  />
+              </a>
+            </p>
+          {% endfor %}
+          <p class="text-center">Silver</p>
+          {% for sponsor in layout.silversponsors %}
+            <p class="text-center">
+              <a href="{{ sponsor.link }}" target="_blank">
+                <img
+                  src="{{ sponsor.logo }}"
+                  alt="{{ sponsor.name }}"
+                  title="{{ sponsor.name }}"
+                  />
+              </a>
+            </p>
+          {% endfor %}
+          <p class="text-center">Bronze</p>
+          {% for sponsor in layout.bronzesponsors %}
             <p class="text-center">
               <a href="{{ sponsor.link }}" target="_blank">
                 <img
