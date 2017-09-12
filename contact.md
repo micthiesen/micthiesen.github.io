@@ -21,7 +21,7 @@ For more details about our team, go [here](/about/team.html). For sponsorship in
 
 <p style="text-align: center;">
   <strong>Team Contact:</strong><br />
-  Team Captain &mdash; Nancy Chu
+  Team Captain &mdash; Sahil Dhingra
 </p>
 
 <p style="text-align: center;">
