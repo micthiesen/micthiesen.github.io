@@ -5,6 +5,13 @@ layout: default
 ---
 
 The team is honored to have been featured in the following newspapers, radio and web articles. If you would like to speak to us for a story, please go to our [contact us](/contact.html) section.
+<h3>2017</h3>
+<ul>
+	<li>
+		<a href="https://globalnews.ca/video/3304217/ubc-students-represent-b-c-with-sustainable-car-prototypes-at-international-competition">
+				Global News</a>
+	</li>
+</ul>
 <h3>2013</h3>
 <ul>
 	<li><a href="http://news.singtao.ca/vancouver/2013-03-20/community1363775087d4408603.html">Sing Tao News</a></li>

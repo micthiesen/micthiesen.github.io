@@ -3,7 +3,7 @@ title: Contact Us
 author: Supermileage
 layout: default
 Captain:
-  - Nancy Chu
+  - Sahil Dhingra
 ---
 If you are looking for more info about any aspect of the team or design of the vehicle, send us your questions! Also, be sure to check out our list of [frequently asked questions][1].
 
