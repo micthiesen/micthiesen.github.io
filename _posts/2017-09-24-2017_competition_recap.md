@@ -8,7 +8,7 @@ and Marshall for Shell Eco-Marathon Americas and SAE Supermileage 2017 Competiti
 We had our ups and downs, but above all we learned and had a blast!
 
 Now with a new season underway everyone is busy at work preparing both cars for
-next year's competition.
+the next competition.
 
 In the meantime, checkout our videos summarizing our trips to competition this
 year, and follow us on [Facebook](https://www.facebook.com/ubcst) for more updates

@@ -3,7 +3,6 @@ title: Urban Concept Car
 author: admin
 layout: default
 ---
-Technical specifications for the Argo can be found [here](http://www.sites.mech.ubc.ca/~supermileage/TechnicalSpecs/Technical Specifications-Argo.pdf)
 
 <div style="width: 100%">
   <h4 style="padding-bottom:5px;padding-top:10px;">
