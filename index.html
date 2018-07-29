@@ -35,36 +35,10 @@
         min-width: 100%;
         transform: translate(-50%, -50%);
       }
-      .ss-icons-left, .ss-icons-right {
-        position: absolute;
-        top: 0;
-        z-index: 10;
-        padding: 20px;
-      }
-      .ss-icons-left a, .ss-icons-right a {
-        text-decoration: none;
-      }
-      .ss-icons-left svg, .ss-icons-right svg {
-        fill: white;
-        transition: all .2s ease-in-out;
-      }
-      .ss-icons-left svg:hover, .ss-icons-right svg:hover {
-        transform: scale(1.15);
-      }
-      .ss-icons-left {
-        left: 0;
-      }
-      .ss-icons-right {
-        right: 0;
-      }
-      .ss-icons-right a:not(:last-child) {
-        margin-right: 15px;
-      }
       .ss-top-part, .ss-bottom-part {
         position: relative;
         width: 100vw;
         height: 50vh;
-        min-height: 200px;
       }
       .ss-top-part > p, .ss-bottom-part > p {
         position: absolute;
@@ -72,46 +46,38 @@
         right: 0;
         text-align: center;
         color: white;
-        padding-left: 10%;
-        padding-right: 10%;
+        padding-left: 5%;
+        padding-right: 5%;
       }
       .ss-top-part > p {
         font-size: 54px;
-        bottom: 20px;
-      }
-      .ss-divider {
-        background-color: white;
-        position: absolute;
-        top: 50%;
-        left: 10%;
-        right: 10%;
-        height: 2px;
-        transform: translateY(-1px);
-        border-radius: 1px;
+        bottom: 12px;
       }
       .ss-bottom-part > p {
         font-size: 28px;
         position: absolute;
-        top: 20px;
+        top: 12px;
       }
 
       .cv-container {
+        display: flex;
+        flex-wrap: wrap;
         position: relative;
-        padding-top: 60px;
-        padding-bottom: 60px;
-        padding-left: 10%;
-        padding-right: 10%;
+        padding-top: 32px;
+        padding-bottom: 32px;
+        padding-left: 5%;
+        padding-right: 5%;
       }
-      .cv-container > p {
-        font-size: 24px;
-        text-align: center;
-      }
-      .cv-container > p > a {
-        display: inline-block;
-        border: solid 2px;
+      .cv-container > .cv-item {
         border-radius: 3px;
-        padding: 10px;
+        border: solid 2px;
         color: #ffea2e;
+        flex-basis: 0;
+        flex-grow: 1;
+        font-size: 24px;
+        margin: 20px;
+        padding: 10px 24px;
+        text-align: center;
         text-decoration: none;
       }
     </style>
@@ -122,43 +88,18 @@
         <source src="videos/particles.webm" type="video/webm">
         <source src="videos/particles.mp4" type="video/mp4">
       </video>
-      <div class="ss-icons-left">
-        <a href="mailto:micthiesen@gmail.com" title="Email">
-          <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="26" height="26" viewBox="0 0 20 20">
-            <path d="M18.64 2.634c-0.344 0.121-17.321 6.104-17.656 6.222-0.284 0.1-0.347 0.345-0.010 0.479 0.401 0.161 3.796 1.521 3.796 1.521v0l2.25 0.901c0 0 10.838-7.958 10.984-8.066 0.148-0.108 0.318 0.095 0.211 0.211s-7.871 8.513-7.871 8.513v0.002l-0.452 0.503 0.599 0.322c0 0 4.65 2.504 4.982 2.682 0.291 0.156 0.668 0.027 0.752-0.334 0.099-0.426 2.845-12.261 2.906-12.525 0.079-0.343-0.148-0.552-0.491-0.431zM7 17.162c0 0.246 0.139 0.315 0.331 0.141 0.251-0.229 2.85-2.561 2.85-2.561l-3.181-1.644v4.064z"></path>
-          </svg>
-        </a>
-      </div>
-      <div class="ss-icons-right">
-        <a href="https://ca.linkedin.com/in/micthiesen" title="LinkedIn">
-          <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="26" height="26" viewBox="0 0 20 20">
-            <path d="M10 0.4c-5.302 0-9.6 4.298-9.6 9.6s4.298 9.6 9.6 9.6 9.6-4.298 9.6-9.6-4.298-9.6-9.6-9.6zM7.65 13.979h-1.944v-6.256h1.944v6.256zM6.666 6.955c-0.614 0-1.011-0.435-1.011-0.973 0-0.549 0.409-0.971 1.036-0.971s1.011 0.422 1.023 0.971c0 0.538-0.396 0.973-1.048 0.973zM14.75 13.979h-1.944v-3.467c0-0.807-0.282-1.355-0.985-1.355-0.537 0-0.856 0.371-0.997 0.728-0.052 0.127-0.065 0.307-0.065 0.486v3.607h-1.945v-4.26c0-0.781-0.025-1.434-0.051-1.996h1.689l0.089 0.869h0.039c0.256-0.408 0.883-1.010 1.932-1.010 1.279 0 2.238 0.857 2.238 2.699v3.699z"></path>
-          </svg>
-        </a>
-        <a href="https://github.com/micthiesen" title="GitHub">
-          <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="26" height="26" viewBox="0 0 20 20">
-            <path d="M10.015 9.949c0 0-0.010 0-0.015 0h-0.015c-1.191 0-2.24-0.303-2.861 0.268-0.371 0.342-0.527 0.754-0.527 1.197 0 1.852 1.483 2.080 3.389 2.080h0.029c1.905 0 3.389-0.229 3.389-2.080 0-0.443-0.156-0.856-0.527-1.197-0.622-0.571-1.671-0.268-2.862-0.268zM8.393 12.48c-0.363 0-0.656-0.408-0.656-0.91s0.293-0.908 0.656-0.908c0.363 0 0.657 0.406 0.657 0.908s-0.293 0.91-0.657 0.91zM11.606 12.48c-0.363 0-0.657-0.408-0.657-0.91s0.294-0.908 0.657-0.908c0.362 0 0.656 0.406 0.656 0.908s-0.293 0.91-0.656 0.91zM10 0.4c-5.302 0-9.6 4.298-9.6 9.6s4.298 9.6 9.6 9.6 9.6-4.298 9.6-9.6-4.298-9.6-9.6-9.6zM10.876 13.939c-0.172 0-0.514 0-0.876 0.002-0.362-0.002-0.704-0.002-0.876-0.002-0.76 0-3.772-0.059-3.772-3.689 0-0.834 0.286-1.445 0.755-1.955-0.074-0.184-0.078-1.232 0.32-2.236 0 0 0.916 0.1 2.301 1.051 0.289-0.081 0.781-0.122 1.272-0.122s0.982 0.041 1.273 0.121c1.385-0.951 2.301-1.051 2.301-1.051 0.398 1.004 0.395 2.053 0.32 2.236 0.469 0.51 0.755 1.121 0.755 1.955-0.001 3.632-3.013 3.69-3.773 3.69z"></path>
-          </svg>
-        </a>
-      </div>
       <div class="ss-top-part">
         <p>Michael Thiesen</p>
       </div>
-      <div class="ss-divider"></div>
       <div class="ss-bottom-part">
-        <p>is a Software Developer from Vancouver, Canada</p>
+        <p>is a Software Engineer living in Vancouver</p>
       </div>
     </div>
     <div class="cv-container">
-      <p class="lead"><a href="http://www.canalyst.com/">Currently working at Canalyst</a></p>
+      <a class="cv-item" href="https://github.com/micthiesen" title="GitHub">GitHub</a>
+      <a class="cv-item" href="https://ca.linkedin.com/in/micthiesen" title="LinkedIn">LinkedIn</a>
+      <a class="cv-item" href="mailto:micthiesen@gmail.com" title="Email">Email</a>
+      <a class="cv-item" href="http://www.canalyst.com/" title="Canalyst">Canalyst</a>
     </div>
   </body>
-  <script type="text/javascript">
-    (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
-    (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
-    m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
-    })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
-    ga('create', 'UA-57654336-2', 'auto');
-    ga('send', 'pageview');
-  </script>
 </html>
