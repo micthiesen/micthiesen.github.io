@@ -3,10 +3,13 @@ import argparse
 import os
 import re
 import subprocess
+import time
 from typing import List, NamedTuple
+import webbrowser
 
 import fitz
 import jinja2
+import requests
 
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -68,12 +71,42 @@ def _commit_with_git(document_path: str) -> None:
     subprocess.run(
         f"git add {document_path}", check=True, shell=True,
     )
+    try:
+        completed = subprocess.run(
+            f"git commit -m 'Adding {document_path} for Pocket'", check=True, shell=True
+        )
+    except subprocess.CalledProcessError:
+        print("Nothing to commit, continuing...")
+    else:
+        subprocess.run(f"git push origin master", check=True, shell=True)
+
+
+def _wait_until_available(document_path: str) -> str:
+    document_url = f"http://www.micthiesen.ca/{document_path}"
+    response = requests.get(document_url)
+    while True:
+        if response.status_code == 200:
+            print("Resource ready, continuing...")
+            break
+        elif response.status_code == 400:
+            print("Resource not ready yet, waiting...")
+            time.sleep(10.0)
+        else:
+            raise ValueError(f"Bad status code {response.status_code}")
+        response = requests.get(document_url)
+    return document_url
+
+
+def _add_to_pocket(document_url: str) -> None:
+    webbrowser.open_new_tab(f"https://getpocket.com/edit/?url={document_url}")
 
 
 def main(file: argparse.FileType, name: str) -> None:
     blocks = _get_content_blocks(file=options.input)
     document_path = _render_html_document(blocks=blocks, name=name)
     _commit_with_git(document_path=document_path)
+    document_url = _wait_until_available(document_path=document_path)
+    _add_to_pocket(document_url=document_url)
 
 
 if __name__ == "__main__":
