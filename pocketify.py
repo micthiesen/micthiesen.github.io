@@ -81,14 +81,13 @@ def _commit_with_git(document_path: str) -> None:
         subprocess.run(f"git push origin master", check=True, shell=True)
 
 
-def _wait_until_available(document_path: str) -> str:
-    document_url = f"http://www.micthiesen.ca/{document_path}"
+def _wait_until_available(document_url: str) -> str:
     response = requests.get(document_url)
     while True:
         if response.status_code == 200:
             print("Resource ready, continuing...")
             break
-        elif response.status_code == 400:
+        elif response.status_code == 404:
             print("Resource not ready yet, waiting...")
             time.sleep(10.0)
         else:
@@ -105,7 +104,11 @@ def main(file: argparse.FileType, name: str) -> None:
     blocks = _get_content_blocks(file=options.input)
     document_path = _render_html_document(blocks=blocks, name=name)
     _commit_with_git(document_path=document_path)
-    document_url = _wait_until_available(document_path=document_path)
+
+    document_url = (
+        f"http://www.micthiesen.ca/{document_path[:document_path.rindex('.')]}"
+    )
+    _wait_until_available(document_url=document_url)
     _add_to_pocket(document_url=document_url)
 
 
