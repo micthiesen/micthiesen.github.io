@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+   <head>
+      <title>{{ name }}</title>
+   </head>
+   <body>
+      <div>
+        <h1>{{ name }}</h1>
+      </div>
+      <div>
+        {% for block in blocks %}
+        <p>
+          {{ block.text }}
+        </p>
+        {% endfor %}
+      </div>
+   </body>
+</html>
