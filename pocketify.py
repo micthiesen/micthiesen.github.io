@@ -69,7 +69,7 @@ def _render_html_document(blocks: List[ContentBlock], name: str) -> str:
 
 def _commit_with_git(document_path: str) -> None:
     subprocess.run(
-        f"git add {document_path}", check=True, shell=True,
+        f'git add "{document_path}"', check=True, shell=True,
     )
     try:
         completed = subprocess.run(
