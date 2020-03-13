@@ -1,0 +1,1574 @@
+<!doctype html>
+<html lang="en">
+   <head>
+      <title>Reverb</title>
+   </head>
+   <body>
+      <div>
+        <h1>Reverb</h1>
+      </div>
+      <div>
+        
+        <p>
+          Reverb: Speculative Debugging for Web Applications
+        </p>
+        
+        <p>
+          Ravi Netravali
+        </p>
+        
+        <p>
+          UCLA
+        </p>
+        
+        <p>
+          James Mickens Harvard University
+        </p>
+        
+        <p>
+          ABSTRACT Bugs are common in web pages. Unfortunately, traditional debug- ging primitives like breakpoints are crude tools for understanding the asynchronous, wide-area data ﬂows that bind client-side JavaScript code and server-side application logic. In this paper, we describe Reverb, a powerful new debugger that makes data ﬂows explicit and queryable. Reverb provides three novel features. First, Reverb tracks precise value provenance , allowing a developer to quickly identify the reads and writes to JavaScript state that affected a par- ticular variable’s value. Second, Reverb enables speculative bug ﬁx analysis . A developer can replay a program to a certain point, change code or data in the program, and then resume the replay; Re- verb uses the remaining log of nondeterministic events to inﬂuence the post-edit replay, allowing the developer to investigate whether the hypothesized bug ﬁx would have helped the original execution run. Third, Reverb supports wide-area debugging for applications whose server-side components use event-driven architectures. By tracking the data ﬂows between clients and servers, Reverb enables speculative replaying of the distributed application.
+        </p>
+        
+        <p>
+          KEYWORDS record-and-replay debugging, systems debugging
+        </p>
+        
+        <p>
+          ACM Reference Format: Ravi Netravali and James Mickens. 2019. Reverb: Speculative Debugging for Web Applications. In SoCC ’19: ACM Symposium of Cloud Computing conference, Nov 20–23, 2019, Santa Cruz, CA. ACM, New York, NY, USA, 16 pages. https://doi.org/10.1145/3357223.3362733
+        </p>
+        
+        <p>
+          INTRODUCTION
+        </p>
+        
+        <p>
+          Debugging the client-side of a web application is hard. The DOM interface [ ], which speciﬁes how JavaScript code interacts with the rest of the browser, is sprawling and constantly accumulating new features [ , ]. Furthermore, the DOM interface is pervasively asynchronous and event-driven, making it challenging for develop- ers to track causality across event handlers [ , , , ]. As a result, JavaScript bugs are endemic, even on popular sites that are maintained by professional developers [57, 59].
+        </p>
+        
+        <p>
+          Commodity browsers include JavaScript debuggers that support breakpoints and watchpoints. However, ﬁxing bugs is still hard. Breakpoints and watchpoints let developers inspect program state
+        </p>
+        
+        <p>
+          Permission to make digital or hard copies of all or part of this work for personal or classroom use is granted without fee provided that copies are not made or distributed for proﬁt or commercial advantage and that copies bear this notice and the full citation on the ﬁrst page. Copyrights for components of this work owned by others than the author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or republish, to post on servers or to redistribute to lists, requires prior speciﬁc permission and/or a fee. Request permissions from permissions@acm.org. SoCC ’19, November 20-23, Santa Cruz, CA © 2019 Copyright held by the owner/author(s). Publication rights licensed to ACM. ACM ISBN 978-1-4503-6973-2/19/11...$15.00 https://doi.org/10.1145/3357223.3362733 at a moment in time; however, in an event-driven program with ex- tensive network and GUI interactions, bug diagnosis often requires complex temporal reasoning to reconstruct a buggy value’s prove- nance across multiple asynchronous code paths. This provenance data is not exposed by more advanced tools for replay debugging or program slicing (§2).
+        </p>
+        
+        <p>
+          In this paper, we introduce Reverb, a new debugger for web applications. Reverb has three features which enable a fundamentally more powerful debugging experience. First, Reverb tracks precise value provenance , i.e., the exact set of reads and writes (and the associated source code lines) that produce each program value. Like a traditional replay debugger [ , , ], Reverb records all of the nondeterministic events from a program’s execution, allowing Reverb to replay a buggy execution with perfect ﬁdelity. Unlike a traditional replay debugger, Reverb also records the deterministic values that are manipulated by reads and writes of page state. Using this extra information at replay time, Reverb enables developers to query ﬁne-grained data ﬂow logs and quickly answer questions like “Did variable x inﬂuence variable y ?” or “Was variable z ’s value affected by a control ﬂow that traversed function f() ?” Reverb’s logging of both nondeterministic and deterministic events is fast enough to run in production: for the median web page in our 300 page test corpus, Reverb increases page load time by only 5.5%, while producing logs that are only 45.4 KB in size.
+        </p>
+        
+        <p>
+          Reverb’s second unique feature is support for speculative bug ﬁx analysis. At replay time, Reverb allows a developer to pause the application being debugged, edit the code or data of the application, and then resume the replay. Post-edit, Reverb replays the remaining nondeterministic events in the log, using carefully-deﬁned seman- tics (§3.3) to determine how those events should be replayed in the context of the edited program execution. Once the altered execu- tion has ﬁnished replaying, Reverb identiﬁes the control ﬂows and data ﬂows which differ in the edited and original executions. These analyses help developers to determine whether a hypothesized bug ﬁx would have helped the original program execution. Speculative edit-and-replay is unsound, in the sense that a post-edit program can misbehave in arbitrary ways, e.g., by attempting to read an undeﬁned variable. However, even without Reverb, the process of testing bug ﬁxes is unsound. A developer typically lacks a priori knowledge about whether a hypothesized ﬁx will work. The developer imple- ments the hypothesized ﬁx, and then runs tests and tries to determine whether the ﬁx actually worked; even if all of the tests pass, there is no guarantee that the ﬁx is completely correct, since the tests may miss corner cases. However, Reverb provides the developer with an important new weapon: the ability to compare the data ﬂows and the control ﬂows in the original execution and the ostensibly bug-free execution. As we demonstrate through case studies (§5.3), the ability to diff program executions is a powerful debugging tool.
+        </p>
+        
+        <p>
+          Reverb’s third novel feature is to support wide-area debug- ging for applications whose server-side components use single- threaded, event-driven architectures like Node [ ], Redis [ ], or
+        </p>
+        
+        <p>
+          NGINX [ ]. For these components, the event loop interface pro- vides a narrow, semantically-well-deﬁned abstraction layer at which to log and replay the components. Thus, Reverb can use vector clocks and a small assortment of additional tricks (§3.4) to track wide-area causality. Reverb provides two levels of support for server- side components: • Node components execute JavaScript code. Thus, Reverb can ap- ply its client-side framework to the server-side, and track variable- level data ﬂows and control ﬂows between multiple browsers and multiple server-side Node instances.
+        </p>
+        
+        <p>
+          • Reverb treats an event-driven (but non-JavaScript) component like Redis as a black box. Reverb logs and replays the component at the level of the component’s externally-visible event interface, tracking data ﬂows emanating from, and terminating at, server- side events.
+        </p>
+        
+        <p>
+          Reverb supports speculative bug ﬁx analysis for data stores and JavaScript state on either side of the wide area. For example, a developer can edit the value that server-side code receives from a Redis database, and then explore how the edited value impacts the remainder of the replaying application’s execution.
+        </p>
+        
+        <p>
+          In summary, our contribution is the ﬁrst distributed replay de- bugger that provides ﬁne-grained data ﬂow tracking and speculative bug ﬁx analysis. Supporting this entire set of debugging capabilities was previously intractable, because prior debuggers operated at the wrong semantic level; Reverb’s insight is that web services using managed runtimes and event-driven cross-server RPCs should be an- alyzed at these levels of abstraction , instead of at the level of system calls or hardware-level instruction traces. However, to fully leverage this new insight, we must provide new debugging infrastructure that prior work lacks. In particular, we introduce a new logic for rea- soning about post-edit replays; this logic describes how editing an application component mid-replay should affect the post-edit replay of that component (§3.3) and remote ones which may see altered output from the mutated component (§3.4). We also introduce new diagnostic techniques for helping developers understand how edited replays diverge from a program’s original executions. These tech- niques, which explain divergences using diffs of data ﬂow graphs and control ﬂow graphs (§3.2), allow Reverb to diagnose complex bugs in real web applications (§5.3). A user study conﬁrms that Reverb is more helpful than traditional in-browser debuggers (§5.6).
+        </p>
+        
+        <p>
+          BACKGROUND
+        </p>
+        
+        <p>
+          Having used the debuggers in commodity browsers [ , , ], and having built several state-of-the-art debuggers ourselves [ , ], we often found ourselves wanting ﬁne-grained data ﬂow tracking and speculative bug ﬁx analysis. In this section, we explain why prior debugging techniques are insufﬁcient to realize the vision of Figure 1.
+        </p>
+        
+        <p>
+          2.1 Traditional debuggers
+        </p>
+        
+        <p>
+          Standard debuggers focus on the abstraction of breakpoints [ , , ]. Debuggers like Visual Studio [ ] and Eclipse [ ] also allow developers to edit some types of program values at a breakpoint, and then resume the program’s live execution. Breakpoints are undoubt- edly useful, but they force a human developer to guess which source code locations are buggy.
+        </p>
+        
+        <p>
+          JavaScript code+heap
+        </p>
+        
+        <p>
+          Browser Node
+        </p>
+        
+        <p>
+          Redis
+        </p>
+        
+        <p>
+          JavaScript code+heap JavaScript code+heap
+        </p>
+        
+        <p>
+          Browser
+        </p>
+        
+        <p>
+          Client 1 Client 2
+        </p>
+        
+        <p>
+          Server
+        </p>
+        
+        <p>
+          DOM DOM
+        </p>
+        
+        <p>
+          Figure 1: EtherCalc [63] is a web-based, collaborative spread- sheet. Multiple users can simultaneously issue edits to the same spreadsheet, with a Node server broadcasting edits to all users, and storing the spreadsheet data in Redis. Bug #314 in Ether- Calc’s issue tracker involves a GUI-based edit from client 1 that is not reﬂected to client 2’s DOM. Ideally, a debugging frame- work could efﬁciently answer two questions. First, how is the relevant DOM state and JavaScript heap state from client 1 being transmitted through the server-side components to the DOM and JavaScript heap of client 2? Second, given recorded state from a buggy execution run, as well as a hypothesized bug ﬁx that modiﬁes code and/or data on clients or servers, would the hypothesized ﬁx remove the problematic behavior in the recorded execution?
+        </p>
+        
+        <p>
+          Some debuggers support watchpoints, which pause an application when a speciﬁc memory location is read or written. Watchpoints eliminate the need for a developer to guess when and where a par- ticular buggy assignment will occur. However, watchpoints do not capture temporal data ﬂows throughout a program. So, developers still have to manually reconstruct reverse temporal ﬂows to deter- mine how the value in a buggy write was generated. Our case studies (§5.3) demonstrate that automated construction of value provenance eliminates human-driven guess work about how program state is created.
+        </p>
+        
+        <p>
+          2.2 Deterministic replay
+        </p>
+        
+        <p>
+          Traditional debuggers pause and inspect the state of live programs. In contrast, replay debuggers [ , , , , , , , , ] ﬁrst log the nondeterministic events in a live execution run, and then replay the program in a controlled environment, using the log to carefully recreate the original order and content of nondeterministic events. Replaying the nondeterministic events is sufﬁcient to induce the remaining, deterministic program behavior, so there is no need to log the values that are manipulated by deterministic reads and writes.
+        </p>
+        
+        <p>
+          The ability to reliably recreate a buggy execution makes it easier to test fault hypotheses. Replay debugging is particularly useful for studying heisenbugs that rarely occur and involve spe- ciﬁc event orderings. Some replay debuggers support backwards- stepping [ , , , ], such that a developer can set a breakpoint or a watchpoint, and then move execution forwards or backwards in time. However, even backwards-stepping debuggers force human developers to manually track value provenance. Thus, root cause analysis is still difﬁcult.
+        </p>
+        
+        <p>
+          2.3 Program slicing
+        </p>
+        
+        <p>
+          A program slice is a subset of program statements that may have inﬂuenced the values that are accessed by a speciﬁc line of source code [ , ]. The tuple
+        </p>
+        
+        <p>
+          <sourceCodeLine,variablesOfInterest> is called the slicing criterion. Given a slicing criterion, a static slice is derived purely from analysis of source code [ , , , , ]; in contrast, a dynamic slice assumes a set of concrete values (e.g., at the slicing criterion) to narrow the set of potentially relevant program statements [1, 2, 23, 30, 66].
+        </p>
+        
+        <p>
+          Slicing algorithms lack a complete, concrete log of the reads and writes made during a real execution; thus, slicing algorithms are often imprecise, particularly for complex programs. Imprecision hurts the use of slices for bug diagnosis, since developers must consider source code lines that may not be causally related to the bug. Imprecision compounds itself if slices are used to reconstruct wide- area execution behavior. In contrast, Reverb provides guaranteed- precise, provenance-annotated execution traces (§3.2). Similar to an instruction trace, a Reverb trace provides a temporal log of the source code statements that a program executed; however, the traces also describe the values that the executed statements manipulated, and the provenance of those values. For additional discussion of program slicing, the interested reader can peruse Section A.4 in the technical report [5].
+        </p>
+        
+        <p>
+          2.4 Data Provenance
+        </p>
+        
+        <p>
+          Provenance-aware ﬁle systems [ , ] allow users to determine which input ﬁles were read by a process during the production of output ﬁles. Reverb deals with the provenance of application state at the granularity of individual program variables that reside on clients and servers. Thus, Reverb tracks how storage data spreads throughout an application, but does so at the level of ﬁne-grained, variable-level ﬂows.
+        </p>
+        
+        <p>
+          Provenance-aware network platforms let operators discover the route that a packet took [ ], or the reason why network switches have certain NDlog rules [ , , ]. Reverb is agnostic about network-level conﬁguration state, but is compatible with systems that track it.
+        </p>
+        
+        <p>
+          2.5 Speculative edit-and-continue
+        </p>
+        
+        <p>
+          Dora [ ] is a single-machine replay debugger that records the OS- level interactions that belong to a group of processes. Dora allows for limited types of edits to occur during replay. If an edit causes a replay to diverge, Dora explores multiple execution paths that are rooted at this initial divergence. Dora executes each post-divergence path on a live machine, recording the subsequent (and nondeterministic) OS- level interactions. Like Reverb, Dora deﬁnes policies for handling new calls to timekeeping functions or socket interfaces. After Dora has explored several potential futures of the divergent replay, Dora identiﬁes the most plausible divergent execution using a metric akin to string edit distance, comparing the system calls of each explored path to those of the original execution.
+        </p>
+        
+        <p>
+          Dora’s speculative power is highly restricted by two factors. First,
+        </p>
+        
+        <p>
+          Dora’s vantage point is at the OS layer. In contrast, Reverb’s vantage point is within the managed runtime of a JavaScript engine, or at the event loop interface of a single-threaded program like Redis. This difference is fundamental, and represents a key insight of Reverb: by
+        </p>
+        
+        <p>
+          Log of nondeterministic events
+        </p>
+        
+        <p>
+          Log of deterministic reads and writes
+        </p>
+        
+        <p>
+          HTML CSS
+        </p>
+        
+        <p>
+          JavaScript code
+        </p>
+        
+        <p>
+          Web page
+        </p>
+        
+        <p>
+          Reverb
+        </p>
+        
+        <p>
+          JavaScript engine
+        </p>
+        
+        <p>
+          Reverb
+        </p>
+        
+        <p>
+          JavaScript engine
+        </p>
+        
+        <p>
+          JavaScript code
+        </p>
+        
+        <p>
+          Log of deterministic reads and writes
+        </p>
+        
+        <p>
+          Log of nondeterministic events
+        </p>
+        
+        <p>
+          Web browser
+        </p>
+        
+        <p>
+          Node server
+        </p>
+        
+        <p>
+          HTTP request + vector clock
+        </p>
+        
+        <p>
+          HTTP response + vector clock
+        </p>
+        
+        <p>
+          Black box server component
+        </p>
+        
+        <p>
+          Event loop
+        </p>
+        
+        <p>
+          Reverb
+        </p>
+        
+        <p>
+          Requests+responses + vector clocks
+        </p>
+        
+        <p>
+          Log of nondeterministic events Requests+responses + vector clocks
+        </p>
+        
+        <p>
+          Figure 2: An overview of Reverb’s architecture. Grey compo- nents are added by Reverb.
+        </p>
+        
+        <p>
+          introspecting on program execution at a higher level of abstraction, Reverb can handle a wider variety of speculative edits , because the side effects of an edit can be reasoned about with respect to a con- strained set of events, instead of the much wider and messier POSIX interface. For example, Dora cannot handle edits which modify thread scheduling, e.g., to cause fewer threads to run, because Dora cannot enumerate and model the ensuing avalanche of side effects upon low-level POSIX state like pthread locks and shared memory pages. In contrast, Reverb can handle a schedule-altering edit that changes the number of client-side frames (the JavaScript equiva- lent of processes). Reverb can tractably reason about such changes because frames cannot share raw memory, are internally single- threaded, and only communicate via pass-by-value postMessage events. Thus, the only way that a newly created frame can impact another frame is via the generation of new postMessage events.
+        </p>
+        
+        <p>
+          Dora’s second restriction is that it does not track individual reads and writes to raw memory, because doing so would be too expen- sive [ ]. Thus, Dora cannot provide variable-level value prove- nance; another consequence is that Dora may incorrectly replay post-edit memory accesses if the edit changes which memory page contains an object. In contrast, Reverb introspects at the JavaScript level, allowing Reverb to efﬁciently track all reads and writes to application-visible state. This difference is fundamental. Logging all reads and writes enables wide-area causality tracking, and is critical for explaining divergences between a logged program run and a speculatively-edited replay (§3.3).
+        </p>
+        
+        <p>
+          DESIGN
+        </p>
+        
+        <p>
+          Figure 2 provides an overview of Reverb’s design. A web appli- cation has multiple clients and servers. Clients are assumed to be standard web browsers which execute JavaScript. Both server-side and client-side components are assumed to be single-threaded and event-driven. Each component records its nondeterministic events; if a component uses a JavaScript engine, then the component also records its deterministic reads and writes to JavaScript state and the DOM (§3.2). Distributed causality between hosts, e.g., via HTTP re- quests, is tracked using vector clocks (§3.4). At debug time, Reverb uses the global event log to replay each client or server in isolation, or together as a single logical application (§3.3 and §3.4).
+        </p>
+        
+        <p>
+          3.1 Overview of the JavaScript Execution Model
+        </p>
+        
+        <p>
+          Execution environment: JavaScript exposes a single threaded, event-driven programming interface. A JavaScript ﬁle deﬁnes initial- ization code that runs once, at the time that the ﬁle is parsed by the JavaScript engine. The initialization code registers event handlers that the JavaScript engine will ﬁre in response to GUI interactions, timer expirations, network activity, and so on. Once a browser has evaluated all of the JavaScript ﬁles in a page’s HTML, the subse- quent execution of the page is driven solely by the reception of asynchronous events.
+        </p>
+        
+        <p>
+          An event handler often calls other functions. Thus, ﬁring a handler can initiate a call chain that is rooted by the handler. A program can register multiple handlers for a single event type. Thus, the call chain for an event is the union of the call chains for the associated event handlers. In the rest of this paper, the unadorned term “call chain” refers to the aggregate call chain for a particular event.
+        </p>
+        
+        <p>
+          Sources of Nondeterminism: In a JavaScript program, the primary source of nondeterminism is the order in which events arrive (and the content of those events) [ ]. JavaScript code may also in- voke a small number of nondeterministic functions. For example, Math.random() returns a random number. Date() returns the current time with millisecond granularity.
+        </p>
+        
+        <p>
+          By default, a JavaScript program consists of a single event loop.
+        </p>
+        
+        <p>
+          However, a web page can incorporate multiple frames [ ] or web workers [ ]; each one represents a new event loop that runs in parallel with the others [ ]. Concurrent execution contexts can only interact with each other via the asynchronous, pass-by-value postMessage() interface [ ]. The browser delivers those mes- sages by ﬁring an event in the recipient’s execution context. Thus, from the perspective of the recipient, handling message nondetermin- ism is no different than handling other event-driven nondeterminism like GUI interactions.
+        </p>
+        
+        <p>
+          Externalizing Output: A JavaScript program can externalize three types of output: • The DOM interface [ ] lets a program update the visual content that users see. The DOM interface deﬁnes methods for dynami- cally manipulating a page’s HTML structure, e.g., by adding new HTML tags, or by changing the CSS styles of preexisting tags.
+        </p>
+        
+        <p>
+          • A JavaScript program can also write to local storage. Cookies [ ] can store up to 4 KB of data, whereas IndexedDB [ ] and the localStorage interface [45] can hold MBs of information.
+        </p>
+        
+        <p>
+          • To send network data, a program uses the
+        </p>
+        
+        <p>
+          XMLHttpRequest [ ] and WebSocket [ ] interfaces. XMLHttpRequest is an older interface which only supports request/response interactions. WebSocket supports full-duplex streams.
+        </p>
+        
+        <p>
+          In this paper, we ignore multimedia objects like <video> streams, since we focus on the debugging of pure HTML, CSS, and JavaScript state.
+        </p>
+        
+        <p>
+          3.2 Analyzing Value Provenance
+        </p>
+        
+        <p>
+          To track data ﬂows, Reverb ﬁrst logs nondeterministic and deter- ministic events. After reconstructing data ﬂows, Reverb uses them to support ﬂow queries, and express state divergences caused by speculative edit-and-continue.
+        </p>
+        
+        <p>
+          Logging Nondeterminism: Prior work has explored various ways to deterministically replay client-side JavaScript code [ , ]. Our Reverb prototype rewrites JavaScript source code to interpose on nondeterministic sources (§4), but Reverb’s design makes no deep assumptions about how nondeterminism is logged or replayed.
+        </p>
+        
+        <p>
+          A Reverb log has an entry for each nondeterministic event; each log entry contains event-speciﬁc data that is sufﬁcient for recreat- ing that event. For example, the log entry for a timer ﬁring con- tains a reference to the timer callback. The log entry for a call to Math.random() contains the return value of the function. The log entry for a mouse click stores which mouse button was clicked, the x and y coordinates for the click, and so on.
+        </p>
+        
+        <p>
+          At the beginning of logging, Reverb takes a snapshot of the client’s local storage (e.g., cookies). Reverb also registers its own handlers for GUI events like mouse clicks. So, if the logged applica- tion only installs handlers for (say) keypress , but not keydown or keyup , Reverb will still log when the latter two kinds of events occur. This information is useful for handling speculative edits which add new GUI handlers (§3.3).
+        </p>
+        
+        <p>
+          Logging Deterministic Reads and Writes: In JavaScript, each ob- ject is essentially a mutable dictionary, with string keys (i.e., property names) mapping to property values. The global namespace is reiﬁed via the special window object, such that references to a global vari- able x are implicitly translated to window.x . Abstractly speaking, Reverb logs reads and writes to the JavaScript heap by shimming the getters and setters for each object dictionary (including the one that belongs to window ). Our Reverb prototype uses JavaScript rewriting to inject this shim code (§4).
+        </p>
+        
+        <p>
+          Reconstructing Data Flows: Using the log of deterministic reads and writes, Reverb can reconstruct the provenance of all JavaScript variable values at any moment in a program’s execution. Given a slicing criterion which mentions variable x at time t , Reverb ﬁnds the prior write for which x was the left-hand side. For the variables on the right-hand side, Reverb ﬁnds the prior write which assigned to those variables. Reverb continues this recursive process until reaching the beginning of the program; the traced path represents the provenance for the slicing criterion. Note that the path may be a tree, not a line, because a single assignment may involve multiple right-hand sides (e.g., x=y+z ). The path may also cross the event handlers that belong to multiple high-level events like key presses or the arrival of network data.
+        </p>
+        
+        <p>
+          Reverb’s log associates each deterministic read or write with a source code line. Thus, Reverb can also generate source-code-level execution traces which provide a serial history of each source code line that a program ran. The core visualization tool that Reverb provides to developers is an execution trace that is overlaid with provenance information: each variable mentioned in each source code line is associated with the prior source code line which gener- ated the variable’s value. Figure 7 depicts an example of such a trace, and the extended technical report [ ] (§A.3) describes some of the pruning techniques which improve the comprehensibility of traces. For now, we merely explain a developer-guided pruning approach that is simple, and important in practice: targeted dynamic tracing. A targeted dynamic trace lets a developer drill down on the executed source code lines (and associated data ﬂows) that affected a speciﬁc variable. As the developer explores the initial trace, the developer can
+        </p>
+        
+        <p>
+          OBJ$0$ x$ y.count$ y$
+        </p>
+        
+        <p>
+          {count:(0}( {count:(0}(
+        </p>
+        
+        <p>
+          {count:(0}( 0(
+        </p>
+        
+        <p>
+          {count:(1}( 1( {count:(1}( {count:(1}( var(x(=({count:(0};( var(y(=(x;( y.count++;(
+        </p>
+        
+        <p>
+          Figure 3: To capture aliasing relationships, Reverb distin- guishes between an underlying object and its multiple names. Writes to an aliased object create horizontal arrows in data ﬂow diagrams, since time ﬂows downward and the aliases are updated simultaneously.
+        </p>
+        
+        <p>
+          add or remove target variables, expanding or shrinking the targeted trace. Our case studies (§5.3) show that targeted dynamic traces are fast to generate, and provide helpful diagnostic information.
+        </p>
+        
+        <p>
+          Reverb uses Scout-style dependency analysis [ ] to track data ﬂows between the JavaScript heap and the DOM. For example, the DOM tree is a data structure which mirrors a page’s dynamic HTML tree; each HTML tag has an associated DOM node that is exposed to JavaScript code. Reverb understands the semantics of DOM methods like Node.appendChild(newChild) . Thus, Reverb can track how JavaScript values ﬂow to DOM nodes, and how DOM values are assigned to JavaScript variables.
+        </p>
+        
+        <p>
+          Reverb’s logs capture a variety of additional behavior. For ex- ample, Reverb explicitly tracks aliasing relationships, as shown in Figure 3. Also, for each executed branch, Reverb records the as- sociated source code line, and the values consumed by the branch test. This information allows Reverb to apply classical algorithms for building dynamic control ﬂow dependencies [ ]. Reverb easily handles the special case of execution ﬂows that span try/catch blocks, since Reverb records both the exception-throwing line, and the catching line.
+        </p>
+        
+        <p>
+          3.3 Speculative Edit-and-Continue Debugging
+        </p>
+        
+        <p>
+          Speculative edit-and-continue debugging has ﬁve phases: • logging the events in a baseline execution run; • replaying the execution up to a speciﬁed point; • changing the program’s state in some way; • resuming execution, with nondeterminism from the original run
+        </p>
+        
+        <p>
+          “inﬂuencing” the post-edit execution; and
+        </p>
+        
+        <p>
+          • comparing the behavior of the original and altered runs to under- stand the effects of the speculative ﬁx.
+        </p>
+        
+        <p>
+          The nondeterministic input vectors for a JavaScript program are well-known and (compared to POSIX) very small in number [ ]. However, deﬁning post-edit replay semantics was previously an un- solved problem. Below, we deﬁne those semantics, describing how to execute post-edit code under the guidance of a log whose nonde- terministic values may not cleanly apply to the post-edit execution. These post-edit replay semantics are an important contribution of the paper.
+        </p>
+        
+        <p>
+          Inside the call chain that contains the edit: Once we have re- played execution to the edit point and modiﬁed the necessary state, we resume the call chain’s execution. Post-edit, the chain may ex- plore different branches than were visited in the original run. Thus, the chain may issue fewer or additional calls to nondeterministic functions like Date() .
+        </p>
+        
+        <p>
+          • If the post-edit code makes fewer calls to a nondeterministic function f , we simply extract return values for f from the log, replaying the same nondeterminism that the original run experi- enced. Once the call chain ﬁnishes, and we must replay the next event’s call chain, we replay f ’s values from the log, starting with the value that was ﬁrst seen by the original execution of the call chain for the new event. For example, suppose that, during the original program execution, two events ﬁred; the ﬁrst call chain consumed random numbers r . . . r , and the second chain consumed r . . . r . Suppose that the ﬁrst call chain is edited, such that it only makes two calls to Math.random() . When the sec- ond call chain executes in the post-edit run, Math.random() will return r , then r , and so on, since these are the random numbers that the second call chain saw during its original run.
+        </p>
+        
+        <p>
+          • If the post-edit code generates more calls to a nondeterministic function than seen at logging time, we use a function-speciﬁc extrapolation technique to generate additional values once the call chain has exhausted the values that are associated with it in the log. For Math.random() , we simply generate new random numbers. For time-related functions like Date() , we return monotonically increasing time values that are smaller than the next logged time value. Once the call chain ﬁnishes and we trigger the call chain for a new event, we return to using the log to provide values for nondeterministic functions.
+        </p>
+        
+        <p>
+          Post-edit code may also generate new externalized output. For exam- ple, an edited value may be written to local storage, or sent over the network via the query string of an XMLHttpRequest . Post-edit code may also modify event handler state in ways that cause fewer or additional events to ﬁre in the future. For example, post-edit code may register timers that were never created in the original run; post- edit code may also deregister timers that ﬁred in the original run. Post-edit code may also generate entirely new network requests, or register/deregister handlers for GUI events. Below, we discuss how to incorporate these changes into the post-edit universe.
+        </p>
+        
+        <p>
+          After the call chain which contains the edit has ﬁnished execu- tion: At this point, the replay framework has completed execution of the call chain. The framework can now manipulate program state before releasing the next event and invoking the appropriate event handlers.
+        </p>
+        
+        <p>
+          Due to the edit, the current execution context may have different event handlers than what the program had at the equivalent moment in the original execution. The replay framework must integrate any changes into the log of nondeterminism; some post-edit events in the log must be marked as “do not replay,” and some new events must be added to the log: • If the edit resulted in the deletion of a timer, we mark all of the timer’s subsequent events as “do not replay.” If the edit created a new timer, we inject new timer events into the log, using the logged wall-clock time of preexisting events to determine where the new timer events should go, relative to the preexisting events.
+        </p>
+        
+        <p>
+          • If the edit deleted a DOM handler, and the edited program has no remaining handlers for a particular event type, we mark all post-edit instances of that event as “do not replay.” For example, if the deletion of a keypress handler leaves the program with no keypress handlers at all, we suppress future dispatches of logged keypresses (because such events cannot trigger any call chains). If an edit registers a new DOM handler, then no special action is required—when the replay framework dispatches a relevant event, the framework will invoke the new handler as usual. Remember that Reverb records all GUI events at logging time, even if the application has not registered its own handlers for those events (§3.2). Thus, at replay time, Reverb can invoke new handlers for a particular event at the appropriate moment.
+        </p>
+        
+        <p>
+          • If an edit closes XMLHttpRequests or WebSockets , the replay framework cancels future events that involve those network connections. If the edit creates a new, unlogged network request, then the replay framework must inject new network events into the log. If the server-side responder is also being replayed, then Reverb inserts a new request into the server-side log; the request represents a speculative server-side edit. When the response is generated, Reverb buffers it, and uses a model of network latency to determine where to inject the response into the client-side log (§3.4). If Reverb does not control the server-side responder, Reverb can terminate replay; alternatively, Reverb can issue the request to the live (but uncontrolled) responder, and then insert the response into a downstream position in the client log, using the observed network latency of the live fetch to determine where to place the response.
+        </p>
+        
+        <p>
+          • The post-edit code may issue new reads or writes to local storage.
+        </p>
+        
+        <p>
+          The replay framework does nothing special to handle synchro- nous accesses to cookies or DOM storage—the framework simply passes those IOs to the underlying storage. For asynchronous ac- cesses to IndexedDB , the replay framework must inject new IO events into the log, using a model for the expected latency of those events. Generating these events is logically similar to generating new network events, as explained in the previous bullet.
+        </p>
+        
+        <p>
+          Note that the replay framework never injects new GUI events into the post-edit universe. For example, the framework will never inject new mouse clicks or key presses. Nothing prevents the framework from doing so, but, lacking a reasonable model for how user intent would change in the post-edit world, the framework is content to merely replay the GUI events from the original program run.
+        </p>
+        
+        <p>
+          Once the replay framework has patched the log, the framework extracts the next high-level event from the log, and initiates the relevant call chain. The event may or may not have been seen in the original program run.
+        </p>
+        
+        <p>
+          Inside the call chain for a new event which did not occur during the original execution: Replay uses extrapolation to generate re- turn values for nondeterministic functions like Math.random() . When the call chain ends, we add and remove top-level events as described above.
+        </p>
+        
+        <p>
+          Inside the call chain for an event which did occur in the original execution: We use the log to replay return values for nondeter- ministic functions; if the call chain’s nondeterministic values are exhausted before the call chain ﬁnishes, we use extrapolation to generate additional values. When the call chain ﬁnishes, we add and remove events from the log as described above. Figure 4 shows an end-to-end example of replaying events after an edit has been made. Once an altered replay ﬁnishes, developers can compare the data ﬂows of the original and altered executions, look- ing for evidence that the hypothesized bug ﬁx actually succeeded.
+        </p>
+        
+        <p>
+          xhr0()
+        </p>
+        
+        <p>
+          XHR readyState (4, data=…) t0()
+        </p>
+        
+        <p>
+          Timer 0 (@4s) q() Date() mc0() mc1()
+        </p>
+        
+        <p>
+          Mouse click
+        </p>
+        
+        <p>
+          (left button) z() //Registers
+        </p>
+        
+        <p>
+          //timer 0 for //t=4s kp0() kp1() x()
+        </p>
+        
+        <p>
+          Key press
+        </p>
+        
+        <p>
+          (“h”) y() //Sets the
+        </p>
+        
+        <p>
+          //timer period //to t=4s
+        </p>
+        
+        <p>
+          (a) A snippet of the program’s original execution, showing two GUI events (each of which triggers two top-level event handlers), a network event which indicates the reception of data from a remote server, and a timer which ﬁres at a wall clock time of 4 seconds after the program started execution.
+        </p>
+        
+        <p>
+          kp0() kp1() x() y() //Edits the
+        </p>
+        
+        <p>
+          Key press
+        </p>
+        
+        <p>
+          (“h”)
+        </p>
+        
+        <p>
+          //timer period //from 4s to 3s; //cancels the //XHR mc0() mc1()
+        </p>
+        
+        <p>
+          Mouse click
+        </p>
+        
+        <p>
+          (left button) z() //Registers
+        </p>
+        
+        <p>
+          //timer 0 for //t=3s t0()
+        </p>
+        
+        <p>
+          Timer 0 (@4s) q() Date() xhr0()
+        </p>
+        
+        <p>
+          XHR readyState (4, data=…) t0()
+        </p>
+        
+        <p>
+          Timer 0 (@3s) q() Date() //Returns //extrapolated //value
+        </p>
+        
+        <p>
+          (b) During the replay process, the developer edits function y() . As a result, the XHR event is never replayed; additionally, the timer ﬁres early, and receives a different value from Date() .
+        </p>
+        
+        <p>
+          Figure 4: An example of how an edit changes the replay process. Beneath each event, we depict the associated call chains. Red indicates functions whose behavior is altered by the edit. Grey indicates events from the original execution which do not occur in the post-edit universe.
+        </p>
+        
+        <p>
+          Reverb uses classical string difﬁng algorithms [ , ] to quickly identify the reads and writes that diverge in the two provenance chains. Reverb’s logs contain enough information to reconstruct execution traces at the granularity of individual source code lines (see Figure 8); thus, developers can use differential slicing [ ] to align divergent executions with respect to shared and non-shared lines of executed source code.
+        </p>
+        
+        <p>
+          3.4 Debugging Across the Wide Area
+        </p>
+        
+        <p>
+          Node: Node [ ] is a server-side implementation of the JavaScript runtime. Like a browser-based JavaScript engine, Node exposes a single-threaded, event-driven interface. A Node application runs headless, i.e., without a GUI, but otherwise has access to timers, non- deterministic functions like Date() , and asynchronous IO channels like network sockets. Reverb interposes on these nondeterministic inputs using the same techniques that it leverages on the client-side.
+        </p>
+        
+        <p>
+          To track causality between a client and a Node server, Reverb uses vector clocks [ , ] to establish a partial ordering over the distributed events. At logging time, when a client issues an XMLHttpRequest , Reverb transparently adds a new cookie value which contains the client’s clock. On the server-side, Reverb trans- parently modiﬁes the HTTP request handler to extract the client clock and update the server’s clock appropriately. When the server generates the HTTP response, Reverb uses a Set-Cookie header to transmit the server’s updated clock to the client; the client ex- tracts the cookie and updates the local clock. The client browser automatically persists the cookie on local storage, as the browser would do for any other type of cookie.
+        </p>
+        
+        <p>
+          In JavaScript, a program can associate a single top-level event with multiple handlers. At logging time, a client or server updates the local clock at the beginning of each event dispatch, before han- dlers run. The use of browser cookies to store client clocks allows a client to detect when passively-fetched content triggers server- side JavaScript execution. For example, suppose that client-side JavaScript code injects a new <link> tag into the page using the innerHTML DOM method; such a tag might represent a new style sheet. Client-side JavaScript will not have an opportunity to inspect the HTTP response headers for the <link> . However, when the next JavaScript-visible event ﬁres, the ﬁrst handler for that event can inspect the cookie that was set by the <link> fetch, extract the server’s vector clock, and then update the local vector clock appropriately.
+        </p>
+        
+        <p>
+          At replay time, Reverb collates the client logs and the server logs, using logical clocks to generate a total ordering over all events. Reverb then replays events from the total ordering; at each step, Reverb moves either a client or a server one event further in the global log.
+        </p>
+        
+        <p>
+          Note that each host’s log contains sufﬁcient information to replay the host in isolation—the log contains all of the external nondeter- ministic stimuli that affected the host, as well as internal nondeter- minism like GUI events or the values returned by clock reads. So, if a host communicates with multiple parties, but only some of them run Reverb, then the host can be replayed by itself, or in concert with some or all of the Reverb-enabled hosts. However, Reverb must be vigilant for speculative edits that generate new, unlogged requests to entities that are not participating in the replay (§3.3).
+        </p>
+        
+        <p>
+          Black-box components: A client-side browser and a server-side Node engine both run single-threaded, event-driven JavaScript code. In contrast, server-side components like Redis and NGINX are single-threaded and event-driven, but are written in C, C++, or an- other non-JavaScript language. Reverb treats each such component as a black box, logging incoming requests and outgoing responses using a proxy. For example, our Reverb prototype intercepts HTTP trafﬁc that is exchanged with a Redis server, using Redis-speciﬁc rules to extract get(k) and put(k,v) commands, and serialize the order in which commands are sent to Redis. Reverb assumes that each event handler inside a black box is deterministic, such that replaying a serialized stream of requests will result in 1) the same internal state for the component, and 2) the same responses being returned. These assumptions are reasonable for server-side components like Redis that act as fairly simple front-ends to storage; however, these assumptions may not hold for server-side components that are written in arbitrarily-expressive, non-JavaScript languages like C++ or Go.
+        </p>
+        
+        <p>
+          A subtlety is that, if a server is concurrently handling multiple requests for a particular client, the server must ensure that the client receives a sequence of responses whose vec- tor clocks have strictly increasing numbers in the server’s slot. This policy is necessary because the client-side browser uses a “last-write-wins” policy for cookies. At replay time, individual responses may be emitted in a different order than the logging-time one, due to nondeterministic replay-time access delays to storage media like SSDs. However, Reverb’s distributed replay driver buffers the responses, and ensures that response data is delivered to clients in the logging-time order.
+        </p>
+        
+        <p>
+          Reverb uses vector clocks to establish causality between black- box components and JavaScript-based components. However, Re- verb does not log the reads and writes that black-box components make to internal state. Thus, data ﬂows involving black-box state originate and terminate in the high-level requests and responses that black-box components exchange with external parties. For example, Reverb can track a JavaScript value on a client to the server-side Redis get() responses that inﬂuenced that value; however, Reverb cannot peer inside Redis to see why those responses were completed in a particular way.
+        </p>
+        
+        <p>
+          At the beginning of logging, Reverb takes a snapshot of a black- box component’s initial state using native mechanisms (e.g., Redis’ built-in snapshot facility). At the beginning of replay, Reverb uses the snapshot to initialize the component.
+        </p>
+        
+        <p>
+          Speculative wide-area edits: Reverb allows a developer to pause the wide-area application, edit client-side or server-side JavaScript, DOM, or storage state, and then resume execution. In general, Re- verb uses the techniques from Section 3.3 to handle divergence, but wide-area debugging introduces some new divergence scenarios.
+        </p>
+        
+        <p>
+          Deﬁne a requestor as a component that generates a request, and the responder as the component that responds. Browsers always acts as requestors, with server-side components acting as the correspond- ing responders; however, as server-side components talk to each other, they may act as requestors or responders at different points in time.
+        </p>
+        
+        <p>
+          An edit may cause a responder to return a different response to a particular request, where “a particular request” is deﬁned as a request made at a speciﬁc vector clock time. Reverb can detect such divergence because, at replay time, Reverb interposes on the methods that the responder uses to return data; Reverb compares the replay- time value of the response to the logged value from the original execution. If the values are different, Reverb rewrites the appropriate requestor-side log entries, propagating the new data. Later, replaying those events will naturally inject the new data into the requestor- side execution state. Subsequent requestor-side divergence is then handled using the approaches from Section 3.3.
+        </p>
+        
+        <p>
+          If an edit induces a requestor to send a modiﬁed request to a responder, Reverb rewrites the appropriate responder-side log entry. When the replay logic applies the log entry to the responder, the replay logic buffers the response, and then replays the response on the requestor at the moment indicated in the log; note that the response may contain altered content with respect to the original, logged version of the response.
+        </p>
+        
+        <p>
+          An edit can induce a requestor to generate a completely new request at a vector clock time that was not associated with a request during the original execution. In this scenario, Reverb’s requestor- side replay driver does not allow the request to hit the real network. Instead, the responder-side driver injects a fake request into the responder-side log, and then resumes the replay process. Eventually, the replaying responder will handle the new event, and generate a response. The replay driver will buffer the response, and use a network model to determine when to replay the response on the requestor.
+        </p>
+        
+        <p>
+          An edit may cause a requestor to not generate a logged request.
+        </p>
+        
+        <p>
+          In this case, Reverb does not replay the associated downstream events on the responder or the requestor. For example, if a browser does not issue a logged XMLHttpRequest to a Node server, then Reverb will not replay the Node-side HTTP request event, or the downstream browser-side events corresponding to the reception of the HTTP response.
+        </p>
+        
+        <p>
+          Replay subtleties: A single web page can embed content from mul- tiple origins. Cookies are isolated using the same-origin policy [ ], so a page from origin foo.com cannot access cookies that are set by (say) <img> fetches to bar.com . Thus, JavaScript code in the enclosing foo.com page cannot read bar.com ’s latest vector clock. An in-browser implementation of Reverb can easily avoid this problem by allowing cross-origin cookie accesses when the browser is running in debug mode. A JavaScript-level implementation of Re- verb must force all remote servers to reside in the same origin. This is often infeasible for the production version of a complex page, but possible for a testing version in which all page content is recorded using Mahimahi [ ] or Fiddler [ ], and then served from a single proxy that rewrites URLs to point to the proxy’s origin.
+        </p>
+        
+        <p>
+          A JavaScript-level implementation of Reverb must also be careful to replay load events properly. These events cannot be synthetically generated or deferred by JavaScript code, since JavaScript code has no ability to force the network stack to release bytes at controlled intervals. So, to properly replay the load event for a passively fetched object like an <img> , Reverb must ensure that, from a client’s perspective, the <img> (and its vector-clock-containing cookie) arrive at a time that respects the vector clocks in the client- side log events. Practically speaking, this means that the server-side replay driver must coordinate with the client-side driver, and only release the last byte of a passively-fetched object when the wide-area replay has reached the appropriate point [36].
+        </p>
+        
+        <p>
+          Handling new features: As with all existing systems for determin- istic replay, Reverb must be updated as the components-to-log-and- replay are updated. We believe that determining when a new runtime interface or network command is added adds minimal burden to de- velopers. For example, for Node [ ], a Reverb developer can simply observe when the managed runtime gains new APIs, or loses old ones. Determining the appropriate semantics for speculative execu- tion may be more difﬁcult. However, we note that a key contribution of Reverb is in pointing out that, by analyzing a system at the level of managed code and single-threaded event loops, reasoning about speculative execution becomes easier.
+        </p>
+        
+        <p>
+          IMPLEMENTATION
+        </p>
+        
+        <p>
+          To log deterministic reads and writes to the JavaScript heap and the DOM, Reverb uses a modiﬁed version of Scout [ ]. The stock version of Scout rewrites JavaScript and HTML, injecting instrumen- tation that runs during each read or write to JavaScript or DOM state. Reverb extends Scout so that it logs nondeterministic JavaScript events like mouse clicks and timer ﬁrings. At replay time, Reverb reconstructs data ﬂows using the low-level Scout traces. Reverb de- ﬁnes a default set of data ﬂow manipulations, like targeted dynamic traces (§3.2). However, Reverb stores raw data ﬂow logs in a simple JSON format, and deﬁnes a plugin model which allows developers to create their own queries. To display data ﬂow graphs, Reverb uses the NEATO visualization library [22].
+        </p>
+        
+        <p>
+          At replay time, Reverb injects a custom JavaScript library into the application code that runs on a browser or a Node instance. The library acts as a replay driver, dispatching high-level events from the log as requested by the human developer who is managing the debugging workﬂow. The event dispatch process is similar to that of prior replay frameworks like Mugshot [ ] or Jardis [ ], although Reverb dispatches events across multiple hosts during wide-area replay (§3.4). Black-box components like Redis are logged and replayed using a component-speciﬁc replay proxy (§3.4).
+        </p>
+        
+        <p>
+          During replay, Reverb uses Mahimahi [ ], a record-and-replay framework for HTTP requests, to serve browser-side content that is fetched via the src attribute of HTML tags. Content that is actively fetched by JavaScript code is served by the replay driver, from the log of nondeterministic events. During a wide-area replay that involves clients and server-side components, Mahimahi only returns passively-fetched content that was not returned by a server-side component during the original execution.
+        </p>
+        
+        <p>
+          To support speculative edit-and-continue, Reverb must be able to modify the code or data belonging to a paused JavaScript execution context. One implementation option would be to change the C++ code inside a JavaScript engine to expose mutation hooks for internal state. Our Reverb prototype uses a different approach—it executes the JavaScript code atop MetaES [ ], a JavaScript interpreter that is written in JavaScript. This approach allows Reverb to be used with arbitrary client browsers or Node implementations, since Reverb can mutate application state without assistance from the underlying JavaScript engine. A developer expresses a pause point as a 2-tuple consisting of a source code line and a trigger condition, e.g., “the i-th iteration of the enclosing loop.” Reverb will pause the MetaES interpreter at the appropriate moment. The developer can inspect the program state, devise an edit, and then express that edit to Reverb in the form of a JavaScript statement for Reverb to speculatively apply to the replay (§3.3).
+        </p>
+        
+        <p>
+          EVALUATION
+        </p>
+        
+        <p>
+          In this section, we demonstrate that Reverb is an efﬁcient, helpful tool for bug analysis .
+        </p>
+        
+        <p>
+          5.1 The Tractability of Data Flow Analysis
+        </p>
+        
+        <p>
+          Intuition might suggest that tracking all deterministic and nondeter- ministic events would produce huge logs. However, in the Alexa Top 300 pages [ ], the median number of reads and writes that occur dur- ing a page load are 13,275 and 6,328, respectively. Those numbers are surprisingly low, given the fact that an average web page includes 401 KB of JavaScript source code [ ]. However, diagnosing bugs is still tricky: a graph with thousands of nodes is small enough to be efﬁciently analyzed by a computer, but big enough to be hard for a human to understand. For example, across the 300 test pages: • the median number of writes per variable was 8, with a 95th percentile of 210;
+        </p>
+        
+        <p>
+          • the median number of unique source code lines that wrote a variable was 5, with a 95th percentile of 22;
+        </p>
+        
+        <p>
+          • when considering the ﬁnal value for each variable, the median length of the value’s provenance chain (§3.2) was 16, with a 95th percentile of 131.
+        </p>
+        
+        <p>
+          These statistics are for the JavaScript code which executes during a page load. After the load completes, additional JavaScript executes in response to GUI interactions, the ﬁring of timers, and so on. Executing post-load call chains results in more reads and writes for
+        </p>
+        
+        <p>
+          Number of Concurrent Requests
+        </p>
+        
+        <p>
+          Requests per Second
+        </p>
+        
+        <p>
+          Default Reverb-enabled
+        </p>
+        
+        <p>
+          Figure 5: Response throughput for two versions of a Node server. Each data point represents the throughput across 100,000 requests.
+        </p>
+        
+        <p>
+          Reverb to track, but the volume is low compared to the activity that is generated by the initial page load. As a concrete example, on the wsj.com website, hovering over a menu item at the top of the page will trigger several event handlers for mouse activity. However, ﬁring these handlers only generates 486 reads and 107 writes. In contrast, the initial page load generates 33,844 reads and 16,121 writes.
+        </p>
+        
+        <p>
+          Using Mahimahi [ ], we loaded Reverb-instrumented pages un- der a variety of emulated network conditions, measuring the client- perceived impact of Reverb’s instrumentation. Due to space restric- tions, we elide a full discussion of the results, and just note that Reverb’s client-side instrumentation is fast enough to add to real, customer-facing pages; for example, on a 12 Mbits/s link with a 50 ms RTT, median page load time slows by just 5.5%. The logs for Reverb-instrumented pages also grow slowly: across our 300 page corpus, the median (gzipped) log size after a page load was 45.4 KB, with a 95th percentile size of 113.2 KB. Given such a log, Reverb required a median of 7.8 seconds to generate a full data ﬂow graph; the 95th percentile time was 32.3 seconds. Note that graph gener- ation can be performed in the background during the logging run. Thus, much or all of the cost can be paid before a human developer begins the debugging process.
+        </p>
+        
+        <p>
+          5.2 Server-side Overheads
+        </p>
+        
+        <p>
+          Reverb’s logging approach for a Node server is similar to Reverb’s logging approach for a client-side browser (§3.4). However, a Node server that handles many clients will produce log entries more quickly than a client browser which loads a single page and then intermittently handles user input. To examine Reverb overheads on Node, we wrote a simple Node web server. For each request, the server returned the dynamic string “Hello world at ” + (new Date()).getTime() . For each request, Reverb had to log the incoming HTTP request, a few dozen reads and writes inside the server’s request handler, the timestamp returned by Date() , and the outgoing HTTP response. This toy server was a pessimistic test of Reverb’s overheads, since real server code has a higher ratio of executed source code lines per nondeterministic value logged.
+        </p>
+        
+        <p>
+          We used the Apache benchmarking tool ab [ ] to generate HTTP requests. We placed the Node server and ab on the same machine, to emphasize Reverb’s computational overheads. As shown in Figure 5, we varied the number of concurrent client requests from 25 to 10,000, measuring response throughput for a normal version of the server, and a Reverb-enabled variant. The throughputs of the two servers
+        </p>
+        
+        <p>
+          Mailpile EtherCalc
+        </p>
+        
+        <p>
+          Total writes 24,202 31,251
+        </p>
+        
+        <p>
+          Total reads 67,335 89,737
+        </p>
+        
+        <p>
+          JavaScript heap objects 2,822 4,028
+        </p>
+        
+        <p>
+          DOM nodes 1,531
+        </p>
+        
+        <p>
+          Wall-clock time to bug at logging time 12.8 secs 10.4 secs
+        </p>
+        
+        <p>
+          Wall-clock time to bug at replay time 3.1 secs 3.9 secs
+        </p>
+        
+        <p>
+          Figure 6: Summary statistics for the Mailpile and EtherCalc case studies. Note that, during replay, Reverb can skip user think time, so Reverb can replay a buggy execution faster than it originally occurred.
+        </p>
+        
+        <p>
+          were within 3% of each other. CPU utilization was also similar for the two servers.
+        </p>
+        
+        <p>
+          The growth of Reverb’s compressed log was 258 Kbps (equivalent to 32.3 KB per second). Note that black box components like Redis have slower log growth—for these components, Reverb logs incom- ing requests and responses, but not deterministic reads or writes to internal black-box state.
+        </p>
+        
+        <p>
+          5.3 Bug Diagnosis Case Study: EtherCalc
+        </p>
+        
+        <p>
+          Evaluating a new debugging platform is tricky, and partially subjec- tive. In this section, we provide an in-depth case study of how we used Reverb to debug a web application that we did not create, and whose code we had no previous familiarity with.
+        </p>
+        
+        <p>
+          As shown in Figure 1, EtherCalc is a collaborative spreadsheet application. A single document can be simultaneously viewed and edited by multiple users, with a Node server disseminating updates across browsers, and storing the canonical spreadsheet state in a Redis database. EtherCalc is the largest application that we exam- ined, consisting of 36 HTML ﬁles, 899 JavaScript ﬁles, and 232,662 total lines of code. Figure 6 provides additional statistics about the application.
+        </p>
+        
+        <p>
+          Bug #314 involves a broken propagation of auto-ﬁll operations between two browsers. In an auto-ﬁll operation, a user enters data (e.g., “1,2,3”) into a few exemplar cells; the user then highlights the cells, and drags the bottom edge of the highlighted region downward, causing the spreadsheet to guess the pattern in the exemplar cells and automatically apply the pattern (e.g., “4,5”) to subsequent cells. In Bug #314, auto-ﬁll operations that are generated on one browser are not properly delivered to other browsers. In the example above, the ﬁrst browser ( client1 ) would correctly display “1,2,3,4,5”, but the second browser ( client2 ) would display “1,1,1,1,1”. We recreated this problem, recording a buggy session that involved two browsers, a Node server, and a Redis server. Diagnosing the bug: Figure 7 annotates a targeted dynamic trace for the buggy execution; to make room for the annotations, we re- moved the more obvious data ﬂows. When client1 ’s user initiates an auto-ﬁll, EtherCalc creates a range object which describes the auto-ﬁll operation; for example, the range object contains the start cell and ending cell for the base pattern, as well as the start cell and ending cell for the range where the extrapolated data should be placed. EtherCalc then calls ExecuteSheetCommand() , using the filldown parameter to indicate a pattern extension request. The function checks whether a valid range object is present (1), and if it exists, the function uses values in the object to determine
+        </p>
+        
+        <p>
+          File:&ethercalc.js&
+        </p>
+        
+        <p>
+          244(257):& &cserver&=&new& &&&&&&&&&&&&&&&&&&&&WebSocket(addr);& client1:)cserver) client1:)range)
+        </p>
+        
+        <p>
+          File:&ethercalc.js&
+        </p>
+        
+        <p>
+          817(991):& &range&=&{“current”:&A1,&“extend”:&5,& &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&“start”:&A1,&“end”:&A3,&“length”:&3};& 818(992):&ExecuteSheetCommand(“ﬁlldown”);& &
+        </p>
+        
+        <p>
+          &
+        </p>
+        
+        <p>
+          File:&socialcalcQ3.js&
+        </p>
+        
+        <p>
+          505(1244):&if&(range.hasrange)&{&//&true& 506(1249)&&&&inc&=&(range.end.val–range.start.val)/range.length;&}& 507(1250):&for&cell&in&range&{&//&iterate&over&rows/columns& 508(1251):&&&cell.val&=&range.start.val&+&(oﬀset*inc);&}& 509(1255):&sheet.clear_range();&
+        </p>
+        
+        <p>
+          &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+        </p>
+        
+        <p>
+          & client1:)inc)
+        </p>
+        
+        <p>
+          File:&socialcalcQ3.js&
+        </p>
+        
+        <p>
+          509(1255):& &range&=&{“current”:&A1,&
+        </p>
+        
+        <p>
+          & &&&&“extend”:&5};&
+        </p>
+        
+        <p>
+          & &
+        </p>
+        
+        <p>
+          File:&socialcalcQ3.js&
+        </p>
+        
+        <p>
+          489(1487):&vals&=&{};& 505(1488):&if&(range.hasrange)&{&//&false&}&else&{& 572(1493):&&&for&cell&in&range&{& 573(1494):&&&&&&&vals[cell]&=&range.current.val;&}}& 579(1499):&return&make_cmd(“ﬁlldown”,&vals);
+        </p>
+        
+        <p>
+          &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+        </p>
+        
+        <p>
+          &
+        </p>
+        
+        <p>
+          File:&ethercalc.js&
+        </p>
+        
+        <p>
+          863(1453):& &cmd=&ExecuteSheetCommand(“broadcast”);& client1:)cmd) client1:)vals)
+        </p>
+        
+        <p>
+          File:&ethercalc.js&
+        </p>
+        
+        <p>
+          863(1499):& &cmd=&“1,&ﬁlldown,&A1;:A5,&all&‘1,1,1,1,1’”;&
+        </p>
+        
+        <p>
+          File:&ethercalc.js&
+        </p>
+        
+        <p>
+          866(1511):& &cserver.send(cmd);& server:)rserver)
+        </p>
+        
+        <p>
+          File:&server.js&
+        </p>
+        
+        <p>
+          114(125):& &redis&=&new& RedisServer(addr,&redis.conf);&
+        </p>
+        
+        <p>
+          &
+        </p>
+        
+        <p>
+          File:&server.js&
+        </p>
+        
+        <p>
+          311(1643):&rserver.onmessage&=&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+        </p>
+        
+        <p>
+          &&&&&func`on(event)&{&
+        </p>
+        
+        <p>
+          312(1644):&&&msg&=&fproc(event);& 313(1645):&&&ops&=&redis.get(msg[0]);& 314(1645):&&&ops.append(msg[1]);& 315(1647):&&&redis.set(msg[0],&ops);} &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& & client2:)cserver)
+        </p>
+        
+        <p>
+          &
+        </p>
+        
+        <p>
+          File:&ethercalc.js&
+        </p>
+        
+        <p>
+          244(2031):&cserver&=&new&& &&&&&&&&&&&&&&&&&&&WebSocket(addr);& 863(2441):&ExecuteSheetCommand(&
+        </p>
+        
+        <p>
+          &&&&&&“update”,&& &&
+        </p>
+        
+        <p>
+          &&&&&&fetch_latest(cserver));&
+        </p>
+        
+        <p>
+          & server:)redis)
+        </p>
+        
+        <p>
+          File:&server.js&
+        </p>
+        
+        <p>
+          &87(102):& &rserver&=&new& &&&&&&&&&&&&&&&&&&&WebSocket(addr);&
+        </p>
+        
+        <p>
+          Redis)Black)Box)Opera9ons)
+        </p>
+        
+        <p>
+          1.&Read(sheet121)& 2.&Write(sheet121,& “1,&ﬁlldown,& A1;:A5,&all&‘1,1,1,1,1’”) && 3.&Read(sheet121) & range.start.value&=&1& range.end.value&=&3& range.length&=&5&
+        </p>
+        
+        <p>
+          “1,&ﬁlldown,&A1;:A5,&all&‘1,1,1,1,1’”& cells&A1QA3&
+        </p>
+        
+        <p>
+          Empty&range&
+        </p>
+        
+        <p>
+          “1,&ﬁlldown,&A1;:A5,&all&‘1,1,1,1,1’”&
+        </p>
+        
+        <p>
+          {A1:1,&A2:1,&A3:1,&A4:1,&A5:1}&
+        </p>
+        
+        <p>
+          Empty&range,&so&just& copies&the&ﬁrst& value&(1,&1,&1,&1,&1)&
+        </p>
+        
+        <p>
+          Displays&
+        </p>
+        
+        <p>
+          ‘1,&1,&1,&1,&1’&
+        </p>
+        
+        <p>
+          Black:box) Read)
+        </p>
+        
+        <p>
+          Black:box) Read)
+        </p>
+        
+        <p>
+          Black:box)Write)
+        </p>
+        
+        <p>
+          Properly&computes& increment&(1)&and&extends& paeern&(1,&2,&3,&4,&5)&
+        </p>
+        
+        <p>
+          6&
+        </p>
+        
+        <p>
+          3&
+        </p>
+        
+        <p>
+          1&
+        </p>
+        
+        <p>
+          2&
+        </p>
+        
+        <p>
+          5&
+        </p>
+        
+        <p>
+          4&
+        </p>
+        
+        <p>
+          9&
+        </p>
+        
+        <p>
+          8&
+        </p>
+        
+        <p>
+          7&
+        </p>
+        
+        <p>
+          Figure 7: A buggy EtherCalc session. The i -th executed source code line is preﬁxed with lineNumInSrcFile( i ) . Black arrows represent data ﬂows between executed source code lines: data written by the source code at the base of an arrow is read by source code at the head of the arrow. The blue and red text was manually added to highlight speciﬁc parts of the debugging narrative; Reverb generates the information in the rest of the diagram.
+        </p>
+        
+        <p>
+          the appropriate increment value for the pattern extension (2). Af- ter applying the auto-ﬁll to client1 ’s GUI and JavaScript state, ExecuteSheetCommand() overwrites client1 ’s range ob- ject, effectively removing several properties like start and extend . client1 then calls ExecuteSheetCommand() again, passing a different parameter called broadcast . This pa- rameter speciﬁes that ExecuteSheetCommand() should not ap- ply the operation to local state, but instead send that operation to the Node server, who will persist the operation in Redis and then distribute the operation to other clients. As in the ﬁrst execution of ExecuteSheetCommand() , the function checks whether a valid range object exists. However, in this case, because the prior function execution partially cleared the range object, the validity check fails (3). As a result, ExecuteSheetCommand() simply generates an operation which copies the value in range.current to all cells covered by range.current to range.length (4); note that these two properties were not removed during the earlier reset of the range object. The resulting operation (5) is what will eventually create the autoﬁll “1, 1, 1, 1, 1” (rather than “1, 2, 3, 4, 5”) on client2 . client1 sends the operation to the Node server (6), triggering a server-side onmessage handler. The handler issues a black-box read to Redis, fetching the list of all operations that have been applied to the spreadsheet (7). The handler appends the new operation to the list, and then uses a black-box write to store the updated list on Redis (8). Later, when client2 opens the spread- sheet (9), client2 will fetch the buggy operation list and use the list to update the local GUI.
+        </p>
+        
+        <p>
+          Fixing the bug: Reverb made it easy for us to generate a wide-area data ﬂow graph. However, these graphs do not automatically provide a bug ﬁx; instead, the graphs help to localize where buggy state is being created, and how that state is being propagated. Thus, our next task was to try to actually ﬁx the bug. An obvious potential ﬁx was to modify ExecuteSheetCommand() so that the ﬁrst invocation did not reset the range object. We made this edit and then performed a speculative replay. The edit initially appeared successful—the Node server received the correct auto-ﬁll opera- tion, stored it on Redis, and then sent it to the second browser, who correctly applied the operation. However, our recorded session con- tained two auto-ﬁll operations involving two distinct sets of cells; our hypothesized ﬁx prevented the second auto-ﬁll operation from appearing in the GUI of the ﬁrst browser or the second browser. Looking at the distributed data ﬂow, we saw that the ﬁrst browser was not generating a second auto-ﬁll locally (and therefore was not sending a second auto-ﬁll operation to the Node server).
+        </p>
+        
+        <p>
+          Further investigation of ExecuteSheetCommand() ’s code revealed that the ﬁrst call in a pair of invocations expects the range object to be set to a default value—otherwise,
+        </p>
+        
+        <p>
+          ExecuteSheetCommand() terminates without updating the lo- cal spreadsheet or sending an update to remote clients via the Node server. We tried a different bug ﬁx in which the second call to ExecuteSheetCommand() clears the range object at the end of ExecuteSheetCommand() ’s execution. The speculative re- play for this ﬁx led to no problems—both auto-ﬁll operations were properly displayed on both browsers.
+        </p>
+        
+        <p>
+          Of course, the successful speculative replay was not a proof of the ﬁx’s correctness; the successful replay was essentially the successful passing of a unit test involving a particular usage scenario. However, this case study demonstrates how replay debugging, wide-area data ﬂow tracking, and speculative edits work in concert to ease the cognitive overhead of understanding large code bases.
+        </p>
+        
+        <p>
+          5.4 Additional Case Studies
+        </p>
+        
+        <p>
+          We have used Reverb to diagnose a variety of additional bugs. The appendix (§A.1 and §A.2) of the extended technical report [ ] pro- vides detailed case studies for two of them. The ﬁrst case study demonstrates Reverb’s usefulness in debugging visual errors in- volving DOM misconﬁguration; the second case study shows how Reverb helps developers to ﬁx errors in third-party JavaScript code that local developers did not write.
+        </p>
+        
+        <p>
+          5.5 Speculatively Replaying Known-Good Bug Fixes
+        </p>
+        
+        <p>
+          As another test of Reverb’s efﬁcacy, from the public bug database of jQuery [ ], we examined ﬁve random bugs from the past eight years, which had successfully been resolved, and whose bug tracker descriptions were sufﬁciently detailed for us to recreate the bug.
+        </p>
+        
+        <p>
+          jQuery is a popular client-side JavaScript library for DOM manipu- lation; the library consists of roughly 6,600 lines of code. For each of the resolved bugs, we did the following: • First, we downloaded the buggy version of jQuery that immedi- ately preceded the patched version.
+        </p>
+        
+        <p>
+          • We veriﬁed that Reverb could reproduce the bug using traditional
+        </p>
+        
+        <p>
+          (i.e., non-speculative) deterministic replay.
+        </p>
+        
+        <p>
+          • We then replayed the library to the moment that preceded the faulty behavior. We paused the replay at that point, applied the known-good bug ﬁx from the bug database, and then resumed the now-speculative replay to see whether the replay would ﬁnish without displaying the faulty behavior.
+        </p>
+        
+        <p>
+          For all ﬁve cases, Reverb’s edited replay correctly indicated that the “speculative” bug ﬁx was indeed a correct one.
+        </p>
+        
+        <p>
+          5.6 User Study
+        </p>
+        
+        <p>
+          To determine whether Reverb would be useful to people besides the paper authors, we performed a small user study involving six participants. All participants had prior experience with front-end web development, and all possessed at least some familiarity with traditional in-browser debuggers. All participants brought their own laptops to the user study, but debugging exercises were performed inside of a VM provided by the paper authors, to ensure uniformity of experience.
+        </p>
+        
+        <p>
+          For each user, we ﬁrst provided a refresher tutorial about how the traditional debugger works; we discussed topics like watchpoints, breakpoints, and code prettiﬁcation. We also explained how Reverb’s data ﬂow graphs are generated and reﬁned via human-driven queries.
+        </p>
+        
+        <p>
+          We examined bugs #3439, #3472, #3571, #3573, and #3579.
+        </p>
+        
+        <p>
+          Once both tutorials were complete, we presented the user with a real bug to diagnose. The bug involved a JavaScript exception being thrown by a real, complex web page; refer to Section A.2 in the extended technical report [ ] for a detailed description of the bug. We divided the participants equally, creating two groups of three; the ﬁrst group was asked to use Reverb to diagnose the bug, whereas the second group was asked to use the traditional in-browser debugger. Each person was given ten minutes to diagnose the bug. When a user believed that she had found the root cause for the bug, she informed the paper authors, who then veriﬁed whether the hypothesized root cause was correct. If it was not, the user was told to keep working until a correct diagnosis was generated, or ten minutes elapsed.
+        </p>
+        
+        <p>
+          Two of the Reverb users diagnosed the bug in less than ﬁve min- utes, with the third user did so within ten minutes. In contrast, one user of the traditional debugger failed to diagnose the error within the ten minute window. The remaining two users of the traditional debugger correctly diagnosed the fault before the timer elapsed, but required more than ﬁve minutes. Thus, these results suggest that Reverb is a more powerful diagnostic tool than a traditional debugger.
+        </p>
+        
+        <p>
+          At the end of the study, we asked the participants some qualitative questions. In response to the question “Would you prefer to use Reverb over a traditional debugger?”, ﬁve out of six participants said yes. The one person who disagreed complained about Reverb’s GUI (which is admittedly rudimentary in our prototype). In particular, the complaining user said that graph querying and pruning was unneces- sarily awkward. When asked “Would Reverb-style data ﬂow oper- ations be a useful compliment to standard debugging primitives?”, all six participants said yes. Furthermore, all three Reverb users de- clared, without prompting, that speculative edit-and-continue would be a powerful debugging feature.
+        </p>
+        
+        <p>
+          Testing bug ﬁxes is inherently unsound, even without Reverb (§1); unsurprisingly, the replay of an edited execution may occasionally lead to confusing results. In the authors’ own experience, these incidents usually involve the replaying of GUI events. For example, if an edit changes the visual locations of DOM nodes, then replaying (say) a mouse click to a particular ( x , � ) coordinate may result in unexpected event handlers ﬁring. Reverb’s ability to diff the data ﬂows and control ﬂows of a logged execution and an edited one can identify the reason for divergence, but developers must be diligent about checking the diffs when exploring counterintuitive post-edit behaviors.
+        </p>
+        
+        <p>
+          CONCLUSION
+        </p>
+        
+        <p>
+          Reverb is the ﬁrst replay debugger that tracks ﬁne-grained, wide- area data ﬂows while also supporting speculative edit-and-continue. Such capabilities were impossible in prior debugging frameworks because those frameworks logged program behavior at the wrong level of abstraction; in contrast, Reverb efﬁciently tracks behavior at the level of managed code and single-threaded event loops. Case studies demonstrate that Reverb is a powerful tool for diagnosing real, complex bugs.
+        </p>
+        
+        <p>
+          REFERENCES
+        </p>
+        
+        <p>
+          [1] Hiralal Agrawal, Richard A. DeMillo, and Eugene H. Spafford. 1991. Dynamic
+        </p>
+        
+        <p>
+          Slicing in the Presence of Unconstrained Pointers. In Proceedings of the Sympo- sium on Testing, Analysis, and Veriﬁcation (TAV4) . ACM.
+        </p>
+        
+        <p>
+          [2] Hiralal Agrawal and Joseph R. Horgan. 1990. Dynamic Program Slicing. In
+        </p>
+        
+        <p>
+          Proceedings of the ACM SIGPLAN 1990 Conference on Programming Language Design and Implementation (PLDI) . ACM.
+        </p>
+        
+        <p>
+          [3] Alexa. [n.d.]. Top Sites in the United States. http://www.alexa.com/topsites/ countries/US.
+        </p>
+        
+        <p>
+          [4] Bowen Alpern, Ton Ngo, Jong-Deok Choi, and Manu Sridharan. 2000. DejaVu:
+        </p>
+        
+        <p>
+          Deterministic Java Replay Debugger for JalapeÑO Java Virtual Machine. In Proceedings of OOPSLA . ACM.
+        </p>
+        
+        <p>
+          [5] Anonymous. [n.d.]. Reverb Technical Report. https://github.com/anonymous- tr/Reverb_SOCC19_Technical_Report/blob/master/reverb_technical_report.pdf.
+        </p>
+        
+        <p>
+          [6] Apache Software Foundation. 2017. https://httpd.apache.org/docs/2.4/programs/ ab.html.
+        </p>
+        
+        <p>
+          [7] Gregory V. Bard. 2007. Spelling-error Tolerant, Order-independent Pass-phrases via the Damerau-levenshtein String-edit Distance Metric. In Proceedings of the Fifth Australasian Symposium on ACSW Frontiers (ACSW) . Australian Computer Society, Inc.
+        </p>
+        
+        <p>
+          [8] Earl T. Barr, Mark Marron, Ed Maurer, Dan Moseley, and Gaurav Seth. 2016. Time-
+        </p>
+        
+        <p>
+          Travel Debugging for JavaScript/Node.js. In Proceedings of the 2016 International Symposium on the Foundations of Software Engineering (FSE) . ACM.
+        </p>
+        
+        <p>
+          [9] Bartosz Krupa. [n.d.]. MetaES. https://github.com/metaes/metaes.
+        </p>
+        
+        <p>
+          [10] Jean-Francois Bergeretti and Bernard A. Carré. 1985. Information-ﬂow and Data- ﬂow Analysis of While-programs. ACM Trans. Program. Lang. Syst. 7, 1 (Jan. 1985).
+        </p>
+        
+        <p>
+          [11] Philip Bille. 2005. A Survey on Tree Edit Distance and Related Problems. Theor.
+        </p>
+        
+        <p>
+          Comput. Sci. 337, 1-3 (June 2005), 217–239.
+        </p>
+        
+        <p>
+          [12] David Binkley, Mark Harman, and Jens Krinke. 2007. Empirical Study of Opti- mization Techniques for Massive Slicing. ACM Trans. Program. Lang. Syst. 30, 1, Article 3 (November 2007).
+        </p>
+        
+        <p>
+          [13] George W. Dunlap, Samuel T. King, Sukru Cinar, Murtaza A. Basrai, and Pe- ter M. Chen. 2002. ReVirt: Enabling Intrusion Analysis Through Virtual-machine Logging and Replay. SIGOPS Oper. Syst. Rev. 36, SI (Dec. 2002).
+        </p>
+        
+        <p>
+          [14] Eclipse. 2016. FAQ What is hot code replace? https://goo.gl/brp5oQ. [15] Stuart I. Feldman and Channing B. Brown. 1988. IGOR: A System for Program
+        </p>
+        
+        <p>
+          Debugging via Reversible Execution. In Proceedings of the 1988 ACM SIGPLAN and SIGOPS Workshop on Parallel and Distributed Debugging (PADD) . ACM.
+        </p>
+        
+        <p>
+          [16] Jeanne Ferrante, Karl J. Ottenstein, and Joe D. Warren. 1987. The Program
+        </p>
+        
+        <p>
+          Dependence Graph and Its Use in Optimization. ACM Trans. Program. Lang. Syst. 9, 3 (July 1987), 319–349.
+        </p>
+        
+        <p>
+          [17] Colin J. Fidge. 1988. Timestamps in message-passing systems that preserve the partial ordering. Proceedings of the 11th Australian Computer Science Conference 10 (1988), 56–66.
+        </p>
+        
+        <p>
+          [18] Firebug. [n.d.]. JavaScript Debugger and Proﬁler. http://getﬁrebug.com/javascript. [19] GDB: The GNU Project Debugger. 2012. GDB and Reverse Debugging. https:
+        </p>
+        
+        <p>
+          //www.gnu.org/software/gdb/news/reversible.html.
+        </p>
+        
+        <p>
+          [20] Dennis Geels, Gautam Altekar, Scott Shenker, and Ion Stoica. 2006. Replay
+        </p>
+        
+        <p>
+          Debugging for Distributed Applications. In Proceedings of the USENIX Annual Technical Conference (ATEC) . USENIX.
+        </p>
+        
+        <p>
+          [21] Google Developers. [n.d.]. Debug. https://developers.google.com/web/tools/ chrome-devtools/debug/?hl=en.
+        </p>
+        
+        <p>
+          [22] Graphviz. [n.d.]. Drawing Graphs with NEATO. http://www.graphviz.org/pdf/ neatoguide.pdf.
+        </p>
+        
+        <p>
+          [23] Tibor Gyimóthy, Árpád Beszédes, and Istán Forgács. 1999. An Efﬁcient Relevant
+        </p>
+        
+        <p>
+          Slicing Method for Debugging. In Proceedings of the 7th European Software Engineering Conference Held Jointly with the 7th ACM SIGSOFT International Symposium on Foundations of Software Engineering (ESEC/FSE-7) . Springer- Verlag, London, UK, UK.
+        </p>
+        
+        <p>
+          [24] Christian Hammer and Gregor Snelting. 2009. Flow-sensitive, Context-sensitive, and Object-sensitive Information Flow Control Based on Program Dependence Graphs. Int. J. Inf. Secur. 8, 6 (Oct. 2009).
+        </p>
+        
+        <p>
+          [25] Ian Hickson. 2015. Web Workers. https://www.w3.org/TR/workers/. [26] Shin Hong, Yongbae Park, and Moonzoo Kim. 2014. Detecting Concurrency
+        </p>
+        
+        <p>
+          Errors in Client-Side Java Script Web Applications. In Proceedings of the 2014 IEEE International Conference on Software Testing, Veriﬁcation, and Validation (ICST) . IEEE Computer Society.
+        </p>
+        
+        <p>
+          [27] Jon Howell, Bryan Parno, and John R. Douceur. 2013. Embassies: Radically Refac- toring the Web. In Proceedings of the 10th USENIX Conference on Networked Systems Design and Implementation (NSDI) . USENIX.
+        </p>
+        
+        <p>
+          [28] Noah M. Johnson, Juan Caballero, Kevin Zhijie Chen, Stephen McCamant,
+        </p>
+        
+        <p>
+          Pongsin Poosankam, Daniel Reynaud, and Dawn Song. 2011. Differential Slicing: Identifying Causal Execution Differences for Security Applications. In Proceed- ings of the 2011 IEEE Symposium on Security and Privacy (SP) . IEEE Computer Society.
+        </p>
+        
+        <p>
+          [29] Andrew J. Ko and Brad A. Myers. 2008. Debugging Reinvented: Asking and
+        </p>
+        
+        <p>
+          Answering Why and Why Not Questions About Program Behavior. In Proceedings of the 30th International Conference on Software Engineering (ICSE) . ACM.
+        </p>
+        
+        <p>
+          [30] Bogdan Korel and JJanusz Laski. 1988. Dynamic Program Slicing. Inform.
+        </p>
+        
+        <p>
+          Process. Lett. 29, 3 (Oct. 1988).
+        </p>
+        
+        <p>
+          [31] Adrian Lienhard, Tudor Gîrba, and Oscar Nierstrasz. 2008. Practical Object-
+        </p>
+        
+        <p>
+          Oriented Back-in-Time Debugging. In Proceedings of the 22Nd European Confer- ence on Object-Oriented Programming (ECOOP) . Berlin, Heidelberg.
+        </p>
+        
+        <p>
+          [32] Mailpile. 2017. https://github.com/mailpile/Mailpile. [33] Friedemann Mattern. 1989. Virtual Time and Global States of Distributed Systems.
+        </p>
+        
+        <p>
+          In Parallel and Distributed Algorithms: proceedings of the International Workshop on Parallel & Distributed Algorithms , M. Cosnard et. al. (Ed.). Elsevier Science Publishers B. V., 215–226.
+        </p>
+        
+        <p>
+          [34] James Mickens. 2012. Rivet: Browser-agnostic Remote Debugging for Web
+        </p>
+        
+        <p>
+          Applications. In Proceedings of the 2012 USENIX Conference on Annual Technical Conference (USENIX ATC’12) . USENIX Association.
+        </p>
+        
+        <p>
+          [35] James Mickens and Mohan Dhawan. 2011. Atlantis: Robust, Extensible Execution
+        </p>
+        
+        <p>
+          Environments for Web Applications. In Proceedings of the Twenty-Third ACM Symposium on Operating Systems Principles (SOSP) . ACM.
+        </p>
+        
+        <p>
+          [36] James Mickens, Jeremy Elson, and Jon Howell. 2010. Mugshot: Deterministic
+        </p>
+        
+        <p>
+          Capture and Replay for Javascript Applications. In Proceedings of NSDI .
+        </p>
+        
+        <p>
+          [37] Microsoft. [n.d.]. Edit and Continue. https://msdn.microsoft.com/en-us/library/ bcew296c.aspx.
+        </p>
+        
+        <p>
+          [38] Mozilla Developer Network. [n.d.]. Concurrent model and Event Loop. goo.gl/
+        </p>
+        
+        <p>
+          UmzCa5.
+        </p>
+        
+        <p>
+          [39] Mozilla Developer Network. [n.d.]. Debugger. https://developer.mozilla.org/en-
+        </p>
+        
+        <p>
+          US/docs/Tools/Debugger.
+        </p>
+        
+        <p>
+          [40] Mozilla Developer Network. 2016. Document Object Model (DOM). https:
+        </p>
+        
+        <p>
+          //developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model.
+        </p>
+        
+        <p>
+          [41] Mozilla Developer Network. 2016. HTTP Cookies. https://developer.mozilla.org/ en-US/docs/Web/HTTP/Cookies.
+        </p>
+        
+        <p>
+          [42] Mozilla Developer Network. 2016. <iframe>. https://developer.mozilla.org/en-
+        </p>
+        
+        <p>
+          US/docs/Web/HTML/Element/iframe.
+        </p>
+        
+        <p>
+          [43] Mozilla Developer Network. 2016. IndexedDB API. https://developer.mozilla.
+        </p>
+        
+        <p>
+          org/en-US/docs/Web/API/IndexedDB_API.
+        </p>
+        
+        <p>
+          [44] Mozilla Developer Network. 2016. Same-origin Policy. https://developer.mozilla.
+        </p>
+        
+        <p>
+          org/en-US/docs/Web/Security/Same-origin_policy.
+        </p>
+        
+        <p>
+          [45] Mozilla Developer Network. 2016. Web Storage API. https://developer.mozilla.
+        </p>
+        
+        <p>
+          org/en-US/docs/Web/API/Web_Storage_API.
+        </p>
+        
+        <p>
+          [46] Mozilla Developer Network. 2016. WebSocket. https://developer.mozilla.org/en-
+        </p>
+        
+        <p>
+          US/docs/Web/API/WebSocket.
+        </p>
+        
+        <p>
+          [47] Mozilla Developer Network. 2016. XMLHttpRequest. https://developer.mozilla.
+        </p>
+        
+        <p>
+          org/en-US/docs/Web/API/XMLHttpRequest.
+        </p>
+        
+        <p>
+          [48] Kiran-Kumar Muniswamy-Reddy, David Holland, Uri Braun, and Margo Seltzer.
+        </p>
+        
+        <p>
+          2006. Provenance-Aware Storage Systems. In Proceedings of USENIX ATC .
+        </p>
+        
+        <p>
+          [49] Erdal Mutlu, Serdar Tasiran, and Benjamin Livshits. 2015. Detecting JavaScript
+        </p>
+        
+        <p>
+          Races That Matter. In Proceedings of the 2015 10th Joint Meeting on Foundations of Software Engineering (ESEC/FSE) . ACM.
+        </p>
+        
+        <p>
+          [50] Nicholas Nethercote and Alan Mycroft. 2003. Redux: A dynamic dataﬂow tracer.
+        </p>
+        
+        <p>
+          In Electronic Notes in Theoretical Computer Science . Elsevier.
+        </p>
+        
+        <p>
+          [51] Ravi Netravali, Ameesh Goyal, James Mickens, and Hari Balakrishnan. 2016. Po- laris: Faster Page Loads Using Fine-grained Dependency Tracking. In Proceedings of NSDI . USENIX Association.
+        </p>
+        
+        <p>
+          [52] Ravi Netravali, Anirudh Sivaraman, Somak Das, Ameesh Goyal, Keith Winstein,
+        </p>
+        
+        <p>
+          James Mickens, and Hari Balakrishnan. 2015. Mahimahi: Accurate Record-and- Replay for HTTP. In Proceedings of ATC . USENIX Association, Santa Clara, CA.
+        </p>
+        
+        <p>
+          [53] NGINX Inc. 2017. NGINX. https://www.nginx.com/. [54] Hung Viet Nguyen, Christian Kästner, and Tien N. Nguyen. 2014. Building
+        </p>
+        
+        <p>
+          Call Graphs for Embedded Client-side Code in Dynamic Web Applications. In Proceedings of the 22Nd ACM SIGSOFT International Symposium on Foundations of Software Engineering (FSE) . ACM.
+        </p>
+        
+        <p>
+          [55] Hung Viet Nguyen, Christian Kästner, and Tien N. Nguyen. 2015. Cross-language
+        </p>
+        
+        <p>
+          Program Slicing for Dynamic Web Applications. In Proceedings of the 2015 10th Joint Meeting on Foundations of Software Engineering (ESEC/FSE) . ACM.
+        </p>
+        
+        <p>
+          [56] Node.js Foundation. 2017. Node.js. https://nodejs.org/en/. [57] Frolin S. Ocariza, Kartik Bajaj, Karthik Pattabiraman, and Ali Mesbah. 2013. An
+        </p>
+        
+        <p>
+          Empirical Study of Client-Side JavaScript Bugs. In 2013 ACM / IEEE International Symposium on Empirical Software Engineering and Measurement .
+        </p>
+        
+        <p>
+          [58] Frolin S. Ocariza, Guanpeng Li, Karthik Pattabiraman, and Ali Mesbah. 2016.
+        </p>
+        
+        <p>
+          Automatic Fault Localization for Client-side JavaScript. Softw. Test. Verif. Reliab. 26, 1 (Jan. 2016).
+        </p>
+        
+        <p>
+          [59] Frolin S. Ocariza, Karthik Pattabiraman, and Benjamin Zorn. 2011. JavaScript
+        </p>
+        
+        <p>
+          Errors in the Wild: An Empirical Study. In Proceedings of the 2011 IEEE 22Nd International Symposium on Software Reliability Engineering (ISSRE) . IEEE Computer Society.
+        </p>
+        
+        <p>
+          [60] Redis Labs. 2017. Redis. https://redis.io/. [61] Sam Shah, Craig Soules, Greg Ganger, and Brian Noble. 2007. Using Provenance to Aid in Personal File Search. In Proceedings of USENIX ATC .
+        </p>
+        
+        <p>
+          [62] Matthew Tancreti, Vinaitheerthan Sundaram, Saurabh Bagchi, and Patrick Eugster.
+        </p>
+        
+        <p>
+          2015. TARDIS: Software-only System-level Record and Replay in Wireless Sensor Networks. In Proceedings of the 14th International Conference on Information Processing in Sensor Networks (IPSN) . ACM.
+        </p>
+        
+        <p>
+          [63] Audrey Tang. 2017. EtherCalc: A Web Spreadsheet. https://ethercalc.net/.
+        </p>
+        
+        <p>
+          [64] Telerik. [n.d.]. Fiddler. http://www.telerik.com/ﬁddler. [65] The jQuery Foundation. 2018. jQuery. https://jquery.com/. [66] Frank Tip. 1994. A Survey of Program Slicing Techniques. Technical Report. CWI
+        </p>
+        
+        <p>
+          (Centre for Mathematics and Computer Science), Amsterdam, The Netherlands.
+        </p>
+        
+        <p>
+          [67] Nicolas Viennot, Siddharth Nair, and Jason Nieh. 2013. Transparent Mutable
+        </p>
+        
+        <p>
+          Replay for Multicore Debugging and Patch Validation. In Proceedings of ASPLOS .
+        </p>
+        
+        <p>
+          [68] WebPagetest. 2016. HTTP Archive - Interesting Stats. https://goo.gl/9V4KJn. [69] Mark Weiser. 1982. Programmers Use Slices when Debugging. Commun. ACM
+        </p>
+        
+        <p>
+          25, 7 (July 1982), 446–452.
+        </p>
+        
+        <p>
+          [70] Yang Wu, Andreas Haeberlen, Wenchao Zhou, and Boon Thau Loo. 2017. Auto- mated Bug Removal for Software-Deﬁned Networks. In Proceedings of NSDI .
+        </p>
+        
+        <p>
+          [71] Yang Wu, Mingchen Zhao, Andreas Haeberlen, Wenchao Zhou, and Boon Thau
+        </p>
+        
+        <p>
+          Loo. 2014. Diagnosing Missing Events in Distributed Systems with Negative Provenance. In Proceedings of SIGCOMM .
+        </p>
+        
+        <p>
+          [72] Yunhui Zheng, Tao Bao, and Xiangyu Zhang. 2011. Statically Locating Web
+        </p>
+        
+        <p>
+          Application Bugs Caused by Asynchronous Calls. In Proceedings of the 20th International Conference on World Wide Web (WWW) . ACM.
+        </p>
+        
+        <p>
+          [73] Wenchao Zhou, Qiong Fei, Narayan Arjun, Andreas Haeberlen, Boon Thau Loo, and Micah Sherr. 2011. Secure Network Provenance. In Proceedings of SOSP .
+        </p>
+        
+        <p>
+          [74] Wenchao Zhou, Micah Sherr, Tao Tao, Xiaozhou Li, Boon Thau Loo, and Yun
+        </p>
+        
+        <p>
+          Mao. 2010. Efﬁcient Querying and Maintenance of Network Provenance at Internet-Scale. In Proceedings of SIGMOD .
+        </p>
+        
+      </div>
+   </body>
+</html>
