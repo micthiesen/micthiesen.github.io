@@ -34,6 +34,7 @@ def _get_content_blocks(file: argparse.FileType) -> List[ContentBlock]:
                     for span in line["spans"]:
                         text = span["text"].strip()
                         text = " ".join(text.split(" "))
+                        text = re.sub(r"\b- \b", "", text)
                         if text.isdigit() or len(text) == 0:
                             continue
                         block_texts.append(text)
